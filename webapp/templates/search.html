@@ -1,10 +1,11 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Search - Novel Reader</title>
     <link rel="stylesheet" href="/static/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
     <nav class="navbar">
@@ -13,7 +14,17 @@
             <li><a href="/">Home</a></li>
             <li><a href="/sources">Sources</a></li>
             <li><a href="/search" class="active">Search</a></li>
+            <li><a href="/favourites">Favourites</a></li>
+            <li><a href="/info">Info</a></li>
             <li><a href="/settings">Settings</a></li>
+            <li>
+                <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                    <svg class="theme-toggle-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">
+                        <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"></circle>
+                        <path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"></path>
+                    </svg>
+                </button>
+            </li>
         </ul>
     </nav>
 
@@ -36,6 +47,28 @@
 
     <script src="/static/js/app.js"></script>
     <script>
+        // Theme toggle functionality
+        (function() {
+            const themeToggle = document.getElementById('themeToggle');
+            const html = document.documentElement;
+            
+            // Load saved theme
+            try {
+                const savedTheme = localStorage.getItem('novel-theme') || 'light';
+                html.setAttribute('data-theme', savedTheme);
+            } catch(e) {}
+            
+            // Toggle theme on button click
+            themeToggle.addEventListener('click', function() {
+                const currentTheme = html.getAttribute('data-theme');
+                const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+                html.setAttribute('data-theme', newTheme);
+                try {
+                    localStorage.setItem('novel-theme', newTheme);
+                } catch(e) {}
+            });
+        })();
+        
         async function performSearch() {
             const query = document.getElementById('search-input').value.trim();
             const sepFlag = document.getElementById('sep-flag').checked;

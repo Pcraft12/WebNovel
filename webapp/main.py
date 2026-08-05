@@ -51,6 +51,18 @@ async def search_page(request: Request):
     return templates.TemplateResponse("search.html", {"request": request})
 
 
+@app.get("/favourites", response_class=HTMLResponse)
+async def favourites_page(request: Request):
+    """Render the favourites page"""
+    return templates.TemplateResponse("favourites.html", {"request": request})
+
+
+@app.get("/info", response_class=HTMLResponse)
+async def info_page(request: Request):
+    """Render the info/about page"""
+    return templates.TemplateResponse("info.html", {"request": request})
+
+
 @app.get("/reader", response_class=HTMLResponse)
 async def reader_page(request: Request):
     """Render the reader page"""

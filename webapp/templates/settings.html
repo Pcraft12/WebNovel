@@ -13,12 +13,26 @@
             <li><a href="/">Home</a></li>
             <li><a href="/sources">Sources</a></li>
             <li><a href="/search">Search</a></li>
+            <li><a href="/favourites">Favourites</a></li>
+            <li><a href="/info">Info</a></li>
             <li><a href="/settings" class="active">Settings</a></li>
         </ul>
     </nav>
 
     <main class="container">
         <h1>⚙️ Settings</h1>
+
+        <section class="settings-section">
+            <h2>🌐 Translation Settings</h2>
+            
+            <div class="setting-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="auto-translate">
+                    <span>Auto-translate to English</span>
+                </label>
+                <p class="setting-description">Automatically translate novel content to English using Google Translate</p>
+            </div>
+        </section>
 
         <section class="settings-section">
             <h2>🎧 Text-to-Speech Settings</h2>
@@ -207,6 +221,7 @@
                 document.getElementById('max-width-value').textContent = `${settings.maxWidth}px`;
             }
             if (settings.sepDefault !== undefined) document.getElementById('sep-default').checked = settings.sepDefault;
+            if (settings.autoTranslate !== undefined) document.getElementById('auto-translate').checked = settings.autoTranslate;
         }
 
         // Save settings
@@ -222,7 +237,8 @@
                 lineHeight: parseFloat(document.getElementById('line-height').value),
                 theme: document.getElementById('theme').value,
                 maxWidth: parseInt(document.getElementById('max-width').value),
-                sepDefault: document.getElementById('sep-default').checked
+                sepDefault: document.getElementById('sep-default').checked,
+                autoTranslate: document.getElementById('auto-translate').checked
             };
 
             localStorage.setItem('novelReaderSettings', JSON.stringify(settings));

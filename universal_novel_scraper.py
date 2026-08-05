@@ -673,28 +673,38 @@ def get_home_feed(source_id: str, page: int = 1) -> List[SearchResult]:
             ))
     
     elif source_id == "xbiquge":
-        for item in soup.select("#maincontent tr, .grid tr"):
-            cols = item.find_all("td")
-            if len(cols) >= 3:
-                title_el = cols[0].find("a")
-                if not title_el:
-                    continue
+        # XBiquge uses h3 tags for novel titles in top lists
+        for item in soup.find_all("h3"):
+            title_el = item.find("a")
+            if not title_el:
+                continue
+            
+            title = title_el.get_text(strip=True)
+            href = title_el.get("href", "")
+            
+            # Skip non-novel links (search, homepage, etc)
+            if not href or href.startswith("/") and len(href) < 5:
+                continue
+            if "?" in href or "search" in href.lower():
+                continue
                 
-                title = title_el.get_text(strip=True)
-                url = urljoin(config["base_url"], title_el.get("href", ""))
-                author = cols[1].get_text(strip=True) if len(cols) > 1 else ""
-                
-                # Try to find cover image
-                cover_el = item.select_one("img")
-                cover_url = urljoin(config["base_url"], cover_el.get("src", "")) if cover_el else ""
-                
-                results.append(SearchResult(
-                    title=title,
-                    url=url,
-                    source=source_id,
-                    author=author,
-                    cover_url=cover_url,
-                ))
+            # Only accept /XX/XX/ pattern (novel info pages)
+            if not re.match(r'^/\d+/\d+/$', href):
+                continue
+            
+            url = urljoin(config["base_url"], href)
+            
+            # Get parent div to find cover image
+            parent_div = item.parent
+            cover_el = parent_div.select_one("img") if parent_div else None
+            cover_url = urljoin(config["base_url"], cover_el.get("src", "")) if cover_el else ""
+            
+            results.append(SearchResult(
+                title=title,
+                url=url,
+                source=source_id,
+                cover_url=cover_url,
+            ))
     
     elif source_id == "biquge_company":
         for item in soup.select(".bookbox, .bookinfo"):
@@ -721,20 +731,24 @@ def get_home_feed(source_id: str, page: int = 1) -> List[SearchResult]:
             ))
     
     elif source_id == "ttkan":
-        for item in soup.select(".novel_cell, [data-v-2ba0104b] .pure-g > div"):
-            title_el = item.select_one("h3 a, .title a, a[title]")
+        # TTKan uses Vue.js - try multiple selectors
+        for item in soup.select(".rank-item, .novel-item, li, .item"):
+            title_el = item.select_one("a[href*='/novels/'], h3 a, .title a")
             if not title_el:
                 continue
             
             title = title_el.get_text(strip=True)
+            if len(title) < 2 or len(title) > 100:
+                continue
+                
             url = urljoin(config["base_url"], title_el.get("href", ""))
             
-            author_el = item.select_one(".author")
+            author_el = item.select_one(".author, .author-name")
             author = author_el.get_text(strip=True) if author_el else ""
             
             # Extract cover image
             cover_el = item.select_one("img")
-            cover_url = urljoin(config["base_url"], cover_el.get("src", "")) if cover_el else ""
+            cover_url = urljoin(config["base_url"], cover_el.get("src", "") or cover_el.get("data-src", "")) if cover_el else ""
             
             # Extract rating
             rating_el = item.select_one(".rating, .score")
@@ -750,26 +764,27 @@ def get_home_feed(source_id: str, page: int = 1) -> List[SearchResult]:
             ))
     
     elif source_id == "shuhaige":
-        for item in soup.select(".list li, .book-item"):
-            title_el = item.select_one("h3 a, .title a")
+        # Shuhaige uses p.bookname inside li elements
+        for item in soup.select("li"):
+            # Look for book title in p.bookname
+            title_el = item.select_one("p[class*='book'] a")
             if not title_el:
                 continue
             
             title = title_el.get_text(strip=True)
+            if len(title) < 2 or len(title) > 100:
+                continue
+                
             url = urljoin(config["base_url"], title_el.get("href", ""))
             
-            author_el = item.select_one(".author")
-            author = author_el.get_text(strip=True) if author_el else ""
-            
-            # Extract cover image
+            # Get image from parent li
             cover_el = item.select_one("img")
-            cover_url = urljoin(config["base_url"], cover_el.get("src", "")) if cover_el else ""
+            cover_url = urljoin(config["base_url"], cover_el.get("src", "") or cover_el.get("data-src", "")) if cover_el else ""
             
             results.append(SearchResult(
                 title=title,
                 url=url,
                 source=source_id,
-                author=author,
                 cover_url=cover_url,
             ))
     

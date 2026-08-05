@@ -5,17 +5,25 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Dependencies
-venv/
-.venv/
-env/
-.ENV
-
 # Logs
 *.log
 
-# Environment variables
+# Environment
 .env
 .env.local
 .env.*
+
+# Dependencies
+.venv/
+venv/
+node_modules/
+
+# Editors
+.vscode/
+.idea/
+
+# Build artifacts
+dist/
+build/
+target/
 ```
