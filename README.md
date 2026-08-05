@@ -1,6 +1,6 @@
 # Universal Novel Scraper & Extractor
 
-**Complete web novel scraping platform with Cloudflare bypass, multi-source search, parallel processing, and intelligent chapter extraction.**
+**Complete web novel scraping platform with Cloudflare bypass, multi-source search, parallel processing, home feeds, cover images, and intelligent chapter extraction.**
 
 ## Table of Contents
 - [Overview](#overview)
@@ -10,6 +10,7 @@
 - [Quick Start](#quick-start)
 - [Usage](#usage)
   - [Search for Novels](#search-for-novels)
+  - [Get Home Feed](#get-home-feed)
   - [Get Chapter List](#get-chapter-list)
   - [Extract Chapter Content](#extract-chapter-content)
   - [Export All Chapters](#export-all-chapters)
@@ -18,6 +19,7 @@
 - [API Reference](#api-reference)
 - [Supported Sources](#supported-sources)
 - [Quality of Life Features](#quality-of-life-features)
+- [Documentation](#documentation)
 
 ---
 
@@ -58,11 +60,14 @@ This project provides a complete solution for scraping Chinese web novels from m
 ## What's New
 
 ### Latest Updates
-1. **☁️ Cloudflare Bypasser Integration** - New `bypasser.py` module with 4-tier architecture
-2. **⚡ Parallel Search** - Multi-threaded source searching (5x faster)
-3. **🔄 Auto-Retry Logic** - Exponential backoff for failed requests
-4. **📊 Better Progress Reporting** - Real-time search status updates
-5. **🛡️ Enhanced Headers** - Browser-like header emulation for all requests
+1. **🏠 Home Feed** - Get recommendations and hot novels from each source with cover images
+2. **🖼️ Cover Images** - Extract and display novel cover art in search, feed, and info results
+3. **🔀 Separate Results** - Use `--sep` flag to group results by source
+4. **☁️ Cloudflare Bypasser Integration** - New `bypasser.py` module with 4-tier architecture
+5. **⚡ Parallel Search** - Multi-threaded source searching (5x faster)
+6. **🔄 Auto-Retry Logic** - Exponential backoff for failed requests
+7. **📊 Better Progress Reporting** - Real-time search status updates
+8. **🛡️ Enhanced Headers** - Browser-like header emulation for all requests
 
 ---
 
@@ -120,6 +125,45 @@ Output as JSON:
 ```bash
 python universal_novel_scraper.py search "novel title" --json
 ```
+
+Search with results separated by source:
+
+```bash
+python universal_novel_scraper.py search "novel title" --sep --json
+```
+
+### Get Home Feed
+
+Get feed from a specific source:
+
+```bash
+python universal_novel_scraper.py feed ixdzs8
+```
+
+Get feed from all sources (combined):
+
+```bash
+python universal_novel_scraper.py feed --all
+```
+
+Output as JSON with cover images:
+
+```bash
+python universal_novel_scraper.py feed shuhaige --json
+```
+
+Paginate through feed:
+
+```bash
+python universal_novel_scraper.py feed biquge --page 2
+```
+
+**Feed URLs by Source:**
+- `ixdzs8` → Hot novels of the day (`/hot/day/`)
+- `shuhaige` → Library recommendations (`/shuku/`)
+- `biquge.company` → Sorted novels (`/sort/0/1.html`)
+- `ttkan` → Ranked novels (`/novel/rank`)
+- `xbiquge` → Weekly top (`/top/week_0_1.html`)
 
 ### Get Chapter List
 
@@ -287,13 +331,15 @@ html = fetch_url("https://site.com", use_bypasser=False)
 
 ## Supported Sources
 
-| Source | Base URL | Search Method | Notes |
-|--------|----------|---------------|-------|
-| ixdzs8 | https://ixdzs8.com | GET | Has expand button |
-| xbiquge | https://www.xbiquge.info | GET | Classic layout |
-| biquge.company | https://www.biquge.company | POST | POST search |
-| ttkan | https://www.ttkan.co | GET | Modern UI |
-| shuhaige | https://m.shuhaige.net | POST | Mobile site |
+| Source | Base URL | Search | Feed | Covers | Notes |
+|--------|----------|--------|------|--------|-------|
+| ixdzs8 | https://ixdzs8.com | ✅ | ✅ `/hot/day/` | ✅ | Has expand button, JS challenges |
+| xbiquge | https://www.xbiquge.info | ✅ | ✅ `/top/` | ✅ | Classic layout |
+| biquge.company | https://www.biquge.company | ✅ | ✅ `/sort/0/` | ✅ | POST search |
+| ttkan | https://www.ttkan.co | ✅ | ✅ `/novel/rank` | ✅ | Modern UI |
+| shuhaige | https://shuhaige.net | ✅ | ✅ `/shuku/` | ✅ | Mobile site |
+
+All sources now support **cover image extraction** in search results, home feeds, and novel info pages.
 
 ---
 
@@ -340,6 +386,16 @@ html = fetch_url("https://site.com", use_bypasser=False)
 - This is normal for some site layouts
 - The content is still extracted, just with lower certainty
 - Check the output manually if confidence < 0.5
+
+---
+
+## Documentation
+
+For more detailed information, see our comprehensive documentation:
+
+- **[Architecture Guide](docs/architecture.md)** - System design, components, and data flow
+- **[Usage Guide](docs/usage.md)** - Complete command reference with examples
+- **[Development Guide](docs/development.md)** - How to add new sources and contribute
 
 ---
 

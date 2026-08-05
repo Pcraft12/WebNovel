@@ -78,6 +78,8 @@ SOURCES = {
         "ajax_chapter_url": "/record/getchapters/",
         "latest_chapters_first": False,
         "duplicate_latest_count": 12,
+        "feed_url": "https://ixdzs8.com/hot/day/",
+        "feed_selector": ".u-list li, .book-item",
     },
     "xbiquge": {
         "name": "xbiquge",
@@ -89,6 +91,8 @@ SOURCES = {
         "has_expand": False,
         "latest_chapters_first": False,
         "duplicate_latest_count": 0,
+        "feed_url": "https://www.xbiquge.info/top/week_0_1.html",
+        "feed_selector": "#maincontent tr, .grid tr",
     },
     "biquge_company": {
         "name": "biquge.company",
@@ -101,6 +105,8 @@ SOURCES = {
         "has_expand": False,
         "latest_chapters_first": False,
         "duplicate_latest_count": 0,
+        "feed_url": "https://www.biquge.company/sort/0/1.html",
+        "feed_selector": ".bookbox, .bookinfo",
     },
     "ttkan": {
         "name": "ttkan",
@@ -113,6 +119,8 @@ SOURCES = {
         "expand_button_selector": "",
         "latest_chapters_first": False,
         "duplicate_latest_count": 0,
+        "feed_url": "https://www.ttkan.co/novel/rank",
+        "feed_selector": ".novel_cell, [data-v-2ba0104b] .pure-g > div",
     },
     "shuhaige": {
         "name": "shuhaige",
@@ -126,6 +134,8 @@ SOURCES = {
         "pagination_pattern": r"/(\d+)_(\d+)/",
         "latest_chapters_first": True,
         "duplicate_latest_count": 0,
+        "feed_url": "https://shuhaige.net/shuku/",
+        "feed_selector": ".list li, .book-item",
     },
 }
 
@@ -492,6 +502,179 @@ def search_source(source_id: str, query: str) -> List[SearchResult]:
                 cover_url=cover_url,
                 latest_chapter=latest_chapter,
                 rating=rating,
+            ))
+
+
+def get_home_feed(source_id: str, page: int = 1) -> List[SearchResult]:
+    """
+    Get home feed / popular novels from a source.
+    
+    Args:
+        source_id: Source identifier
+        page: Page number for pagination
+    
+    Returns:
+        List of SearchResult with cover images, titles, etc.
+    """
+    if source_id not in SOURCES:
+        print(f"Unknown source: {source_id}", file=sys.stderr)
+        return []
+    
+    config = SOURCES[source_id]
+    feed_url = config.get("feed_url")
+    
+    if not feed_url:
+        print(f"No feed URL configured for {source_id}", file=sys.stderr)
+        return []
+    
+    # Handle pagination in feed URL
+    if "{page}" in feed_url:
+        feed_url = feed_url.format(page=page)
+    
+    html = fetch_url(feed_url)
+    if not html:
+        return []
+    
+    soup = BeautifulSoup(html, "lxml")
+    results = []
+    
+    # Source-specific parsing logic for feeds
+    if source_id == "ixdzs8":
+        for item in soup.select(".burl, .u-list li, .book-item"):
+            title_el = item.select_one("h3 a, h2 a, .title a, .bname a")
+            if not title_el:
+                continue
+            
+            title = title_el.get_text(strip=True)
+            url = urljoin(config["base_url"], title_el.get("href", ""))
+            
+            author_el = item.select_one(".author, .book-author, .bauthor a")
+            author = author_el.get_text(strip=True) if author_el else ""
+            
+            desc_el = item.select_one(".desc, .description, .intro, .l-p2")
+            description = desc_el.get_text(strip=True) if desc_el else ""
+            
+            # Extract cover image - critical for home feed
+            cover_el = item.select_one("img")
+            if cover_el:
+                cover_src = cover_el.get("src", "") or cover_el.get("data-src", "")
+                cover_url = urljoin(config["base_url"], cover_src) if cover_src else ""
+            else:
+                cover_url = ""
+            
+            # Extract rating if available
+            rating_el = item.select_one(".rating, .score, .stars")
+            rating = rating_el.get_text(strip=True) if rating_el else ""
+            
+            results.append(SearchResult(
+                title=title,
+                url=url,
+                source=source_id,
+                author=author,
+                description=description,
+                cover_url=cover_url,
+                rating=rating,
+            ))
+    
+    elif source_id == "xbiquge":
+        for item in soup.select("#maincontent tr, .grid tr"):
+            cols = item.find_all("td")
+            if len(cols) >= 3:
+                title_el = cols[0].find("a")
+                if not title_el:
+                    continue
+                
+                title = title_el.get_text(strip=True)
+                url = urljoin(config["base_url"], title_el.get("href", ""))
+                author = cols[1].get_text(strip=True) if len(cols) > 1 else ""
+                
+                # Try to find cover image
+                cover_el = item.select_one("img")
+                cover_url = urljoin(config["base_url"], cover_el.get("src", "")) if cover_el else ""
+                
+                results.append(SearchResult(
+                    title=title,
+                    url=url,
+                    source=source_id,
+                    author=author,
+                    cover_url=cover_url,
+                ))
+    
+    elif source_id == "biquge_company":
+        for item in soup.select(".bookbox, .bookinfo"):
+            title_el = item.select_one("h3 a, h2 a, .title a")
+            if not title_el:
+                continue
+            
+            title = title_el.get_text(strip=True)
+            url = urljoin(config["base_url"], title_el.get("href", ""))
+            
+            author_el = item.select_one(".author")
+            author = author_el.get_text(strip=True) if author_el else ""
+            
+            # Extract cover image
+            cover_el = item.select_one("img")
+            cover_url = urljoin(config["base_url"], cover_el.get("src", "")) if cover_el else ""
+            
+            results.append(SearchResult(
+                title=title,
+                url=url,
+                source=source_id,
+                author=author,
+                cover_url=cover_url,
+            ))
+    
+    elif source_id == "ttkan":
+        for item in soup.select(".novel_cell, [data-v-2ba0104b] .pure-g > div"):
+            title_el = item.select_one("h3 a, .title a, a[title]")
+            if not title_el:
+                continue
+            
+            title = title_el.get_text(strip=True)
+            url = urljoin(config["base_url"], title_el.get("href", ""))
+            
+            author_el = item.select_one(".author")
+            author = author_el.get_text(strip=True) if author_el else ""
+            
+            # Extract cover image
+            cover_el = item.select_one("img")
+            cover_url = urljoin(config["base_url"], cover_el.get("src", "")) if cover_el else ""
+            
+            # Extract rating
+            rating_el = item.select_one(".rating, .score")
+            rating = rating_el.get_text(strip=True) if rating_el else ""
+            
+            results.append(SearchResult(
+                title=title,
+                url=url,
+                source=source_id,
+                author=author,
+                cover_url=cover_url,
+                rating=rating,
+            ))
+    
+    elif source_id == "shuhaige":
+        for item in soup.select(".list li, .book-item"):
+            title_el = item.select_one("h3 a, .title a")
+            if not title_el:
+                continue
+            
+            title = title_el.get_text(strip=True)
+            url = urljoin(config["base_url"], title_el.get("href", ""))
+            
+            author_el = item.select_one(".author")
+            author = author_el.get_text(strip=True) if author_el else ""
+            
+            # Extract cover image
+            cover_el = item.select_one("img")
+            cover_url = urljoin(config["base_url"], cover_el.get("src", "")) if cover_el else ""
+            
+            results.append(SearchResult(
+                title=title,
+                url=url,
+                source=source_id,
+                author=author,
+                cover_url=cover_url,
             ))
     
     elif source_id == "xbiquge":
@@ -1413,11 +1596,19 @@ def extract_chapter_content(chapter_url: str) -> Optional[Dict[str, Any]]:
     
     Uses the existing novel_extractor.py if available,
     otherwise falls back to basic extraction.
+    Special handling for ixdzs8.com with challenge token resolution.
     """
     source_id = get_source_from_url(chapter_url)
     config = SOURCES.get(source_id, {})
     
-    html = fetch_url(chapter_url)
+    # Special handling for ixdzs8.com - resolve challenge token first
+    html = None
+    if source_id == "ixdzs8":
+        html = fetch_ixdzs8_with_challenge(chapter_url)
+    
+    if not html:
+        html = fetch_url(chapter_url)
+    
     if not html:
         return None
     
@@ -1437,14 +1628,14 @@ def extract_chapter_content(chapter_url: str) -> Optional[Dict[str, Any]]:
     soup = BeautifulSoup(html, "lxml")
     
     # Try to find chapter title
-    title_el = soup.select_one("h1, h2, .chapter-title, .title")
+    title_el = soup.select_one("h1, h2, .chapter-title, .title, .page-d-name")
     title = title_el.get_text(strip=True) if title_el else ""
     
     # Try to find chapter content
     content_selectors = [
         ".chapter-content", "#chapter-content", ".content", "#content",
         ".article-content", "#article-content", ".read-content",
-        "[class*='chapter']", "[id*='chapter']",
+        ".page-content section", "[class*='chapter']", "[id*='chapter']",
     ]
     
     content_el = None
@@ -1471,34 +1662,153 @@ def extract_chapter_content(chapter_url: str) -> Optional[Dict[str, Any]]:
     }
 
 
+def fetch_ixdzs8_with_challenge(url: str, max_attempts: int = 3) -> Optional[str]:
+    """
+    Fetch ixdzs8.com URL by resolving the challenge token.
+    
+    The site uses a JavaScript-based challenge that redirects with a token.
+    We need to extract the token and follow the redirect manually.
+    
+    Args:
+        url: The URL to fetch
+        max_attempts: Maximum number of challenge attempts
+    
+    Returns:
+        HTML content or None if failed
+    """
+    import re
+    
+    headers = DEFAULT_HEADERS.copy()
+    headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+    headers["Accept-Language"] = "zh-CN,zh;q=0.9,en;q=0.8"
+    
+    try:
+        session = requests.Session()
+        
+        for attempt in range(max_attempts):
+            # First request - get challenge page
+            response = session.get(url, headers=headers, timeout=30, allow_redirects=False)
+            
+            # Check if we got the actual content (no challenge)
+            if response.status_code == 200 and "正在验证浏览器" not in response.text:
+                response.encoding = response.apparent_encoding
+                return response.text
+            
+            # Extract challenge token from JavaScript
+            token_match = re.search(r'let\s+token\s*=\s*"([^"]+)"', response.text)
+            if not token_match:
+                # Maybe already have content
+                if len(response.text) > 5000:
+                    response.encoding = response.apparent_encoding
+                    return response.text
+                return None
+            
+            token = token_match.group(1)
+            
+            # Build challenge URL
+            from urllib.parse import urlparse, parse_qs, urlencode
+            parsed = urlparse(url)
+            path = parsed.path
+            
+            # Make second request with token
+            challenge_url = f"https://ixdzs8.com{path}?challenge={token}"
+            response = session.get(challenge_url, headers=headers, timeout=30, allow_redirects=True)
+            
+            if response.status_code == 200 and "正在验证浏览器" not in response.text:
+                response.encoding = response.apparent_encoding
+                return response.text
+            
+            # If still challenged, the token might have changed - try again
+            time.sleep(0.5 * (attempt + 1))
+        
+        return None
+        
+    except Exception as e:
+        print(f"Error fetching ixdzs8 with challenge: {e}", file=sys.stderr)
+        return None
+
+
 # ============================================================================
 # Interactive CLI
 # ============================================================================
 
-def display_search_results(results: List[SearchResult]):
+def display_search_results(results: List[SearchResult], separate: bool = False):
     """Display search results in a formatted way."""
     if not results:
         print("No results found.")
         return
     
+    if separate:
+        # Group by source
+        from collections import defaultdict
+        by_source = defaultdict(list)
+        for result in results:
+            by_source[result.source].append(result)
+        
+        for source_id, source_results in sorted(by_source.items()):
+            print(f"\n{'='*80}")
+            print(f"Source: {source_id} ({len(source_results)} results)")
+            print(f"{'='*80}")
+            for i, result in enumerate(source_results, 1):
+                print(f"\n[{i}] {result.title}")
+                print(f"    URL: {result.url}")
+                if result.cover_url:
+                    print(f"    Cover: {result.cover_url}")
+                if result.author:
+                    print(f"    Author: {result.author}")
+                if result.rating:
+                    print(f"    Rating: {result.rating}")
+                if result.latest_chapter:
+                    print(f"    Latest: {result.latest_chapter}")
+                if result.description:
+                    desc = result.description[:100] + "..." if len(result.description) > 100 else result.description
+                    print(f"    Description: {desc}")
+    else:
+        print(f"\n{'='*80}")
+        print(f"Found {len(results)} results:\n")
+        
+        for i, result in enumerate(results, 1):
+            print(f"[{i}] {result.title}")
+            print(f"    Source: {result.source}")
+            print(f"    URL: {result.url}")
+            if result.cover_url:
+                print(f"    Cover: {result.cover_url}")
+            if result.author:
+                print(f"    Author: {result.author}")
+            if result.rating:
+                print(f"    Rating: {result.rating}")
+            if result.latest_chapter:
+                print(f"    Latest: {result.latest_chapter}")
+            if result.description:
+                desc = result.description[:100] + "..." if len(result.description) > 100 else result.description
+                print(f"    Description: {desc}")
+            print()
+
+
+def display_feed_results(results: List[SearchResult]):
+    """Display home feed results with cover images."""
+    if not results:
+        print("No results found.")
+        return
+    
     print(f"\n{'='*80}")
-    print(f"Found {len(results)} results:\n")
+    print(f"Home Feed - {len(results)} popular novels:\n")
     
     for i, result in enumerate(results, 1):
         print(f"[{i}] {result.title}")
         print(f"    Source: {result.source}")
         print(f"    URL: {result.url}")
         if result.cover_url:
-            print(f"    Cover: {result.cover_url}")
+            print(f"    📚 Cover: {result.cover_url}")
         if result.author:
-            print(f"    Author: {result.author}")
+            print(f"    ✍️  Author: {result.author}")
         if result.rating:
-            print(f"    Rating: {result.rating}")
+            print(f"    ⭐ Rating: {result.rating}")
         if result.latest_chapter:
-            print(f"    Latest: {result.latest_chapter}")
+            print(f"    📖 Latest: {result.latest_chapter}")
         if result.description:
             desc = result.description[:100] + "..." if len(result.description) > 100 else result.description
-            print(f"    Description: {desc}")
+            print(f"    📝 Description: {desc}")
         print()
 
 
@@ -1646,6 +1956,7 @@ Examples:
   %(prog)s search "洪荒：我開局打造鴻蒙金榜"
   %(prog)s chapters https://ixdzs8.com/book/123/dir
   %(prog)s extract https://ixdzs8.com/book/123/chapter-1
+  %(prog)s feed ixdzs8
   %(prog)s interactive
         """
     )
@@ -1658,6 +1969,14 @@ Examples:
     search_parser.add_argument("--sources", nargs="+", choices=list(SOURCES.keys()),
                                help="Specific sources to search")
     search_parser.add_argument("--json", action="store_true", help="Output as JSON")
+    search_parser.add_argument("--sep", action="store_true", help="Separate results by source")
+    
+    # Feed command (home feed / popular novels)
+    feed_parser = subparsers.add_parser("feed", help="Get home feed / popular novels")
+    feed_parser.add_argument("source", nargs="?", choices=list(SOURCES.keys()), help="Source to get feed from (optional if --all is used)")
+    feed_parser.add_argument("--page", type=int, default=1, help="Page number")
+    feed_parser.add_argument("--json", action="store_true", help="Output as JSON")
+    feed_parser.add_argument("--all", action="store_true", dest="show_all", help="Show all sources combined")
     
     # Chapters command
     chapters_parser = subparsers.add_parser("chapters", help="Get chapter list")
@@ -1686,7 +2005,27 @@ Examples:
         if args.json:
             print(json.dumps([r.to_dict() for r in results], ensure_ascii=False, indent=2))
         else:
-            display_search_results(results)
+            display_search_results(results, separate=args.sep)
+    
+    elif args.command == "feed":
+        if args.show_all:
+            # Get feed from all sources
+            all_results = []
+            for source_id in SOURCES.keys():
+                results = get_home_feed(source_id, page=args.page)
+                all_results.extend(results)
+            
+            if args.json:
+                print(json.dumps([r.to_dict() for r in all_results], ensure_ascii=False, indent=2))
+            else:
+                display_feed_results(all_results)
+        else:
+            # Get feed from specific source
+            results = get_home_feed(args.source, page=args.page)
+            if args.json:
+                print(json.dumps([r.to_dict() for r in results], ensure_ascii=False, indent=2))
+            else:
+                display_feed_results(results)
     
     elif args.command == "chapters":
         novel_info = fetch_novel_info(args.url)

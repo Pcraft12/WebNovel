@@ -360,9 +360,32 @@ class Bypasser:
             if options.get("data"):
                 kwargs["data"] = options["data"]
             
-            # Make request
+            # Make initial request
             response = self.session.request(method, url, **kwargs)
             response.encoding = response.apparent_encoding
+            
+            # Check for JS-based challenge (ixdzs8 style)
+            if response.status_code == 200 and self._is_js_challenge(response.text):
+                if self.config.debug:
+                    print(f"[BYPASS] Detected JS challenge, attempting token extraction")
+                
+                # Extract token from JavaScript
+                import re
+                token_match = re.search(r'let token = "([^"]+)"', response.text)
+                if token_match:
+                    token = token_match.group(1)
+                    # Build challenge URL
+                    from urllib.parse import urlparse, parse_qs, urlencode
+                    parsed = urlparse(url)
+                    # Add challenge parameter
+                    if '?' in url:
+                        challenge_url = f"{url}&challenge={token}"
+                    else:
+                        challenge_url = f"{url}?challenge={token}"
+                    
+                    # Make second request with challenge token
+                    response = self.session.request(method, challenge_url, **kwargs)
+                    response.encoding = response.apparent_encoding
             
             # Extract cookies
             cookies = self._extract_cookies(response)
@@ -400,6 +423,25 @@ class Bypasser:
                 tier=1,
                 error=str(e),
             )
+    
+    def _is_js_challenge(self, body: str) -> bool:
+        """Check if response contains JavaScript-based challenge."""
+        if not body:
+            return False
+        
+        # Check for common JS challenge patterns
+        challenge_patterns = [
+            r'let token = "[^"]+"',
+            r'window\.location\.href.*challenge',
+            r'請稍等，正在進行安全驗證',
+            r'正在验证浏览器',
+        ]
+        
+        for pattern in challenge_patterns:
+            if re.search(pattern, body, re.IGNORECASE):
+                return True
+        
+        return False
     
     def _tier2_cached(self, method: str, url: str, options: Optional[Dict] = None) -> FetchResult:
         """Tier 2: Use cached session with fresh request."""
