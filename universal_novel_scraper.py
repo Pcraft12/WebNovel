@@ -74,7 +74,8 @@ SOURCES = {
         "search_selector": ".u-list li, .book-item, .search-result",
         "chapter_list_pattern": r"/book/\d+/dir",
         "has_expand": True,
-        "expand_button_selector": ".chapter-expand-btn",
+        "expand_button_selector": ".catalog-all, .catalog",
+        "ajax_chapter_url": "/record/getchapters/",
         "latest_chapters_first": False,
         "duplicate_latest_count": 12,
     },
@@ -108,10 +109,10 @@ SOURCES = {
         "search_method": "GET",
         "search_selector": ".novel_cell, [data-v-2ba0104b] .pure-g > div",
         "chapter_list_pattern": r"/novels/[^/]+/",
-        "has_expand": True,
-        "expand_button_selector": "button[data-target='#all-chapters']",
+        "has_expand": False,
+        "expand_button_selector": "",
         "latest_chapters_first": False,
-        "duplicate_latest_count": 12,
+        "duplicate_latest_count": 0,
     },
     "shuhaige": {
         "name": "shuhaige",
@@ -121,7 +122,8 @@ SOURCES = {
         "search_data": {"searchkey": "{query}"},
         "search_selector": ".list li, .book-item, .search-result",
         "chapter_list_pattern": r"/read/\d+/|/shu_\d+/",
-        "has_expand": False,
+        "has_pagination": True,
+        "pagination_pattern": r"/(\d+)_(\d+)/",
         "latest_chapters_first": True,
         "duplicate_latest_count": 0,
     },
@@ -179,6 +181,8 @@ class SearchResult:
     cover_url: str = ""
     latest_chapter: str = ""
     status: str = ""
+    rating: str = ""
+    word_count: str = ""
     
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -190,6 +194,8 @@ class SearchResult:
             "cover_url": self.cover_url,
             "latest_chapter": self.latest_chapter,
             "status": self.status,
+            "rating": self.rating,
+            "word_count": self.word_count,
         }
 
 
@@ -223,6 +229,10 @@ class NovelInfo:
     status: str = ""
     chapters: List[ChapterInfo] = field(default_factory=list)
     total_chapters: int = 0
+    rating: str = ""
+    word_count: str = ""
+    recommendations: List[Dict[str, str]] = field(default_factory=list)
+    categories: List[str] = field(default_factory=list)
     
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -235,6 +245,10 @@ class NovelInfo:
             "status": self.status,
             "total_chapters": self.total_chapters,
             "chapters": [c.to_dict() for c in self.chapters],
+            "rating": self.rating,
+            "word_count": self.word_count,
+            "recommendations": self.recommendations,
+            "categories": self.categories,
         }
 
 
@@ -461,13 +475,23 @@ def search_source(source_id: str, query: str) -> List[SearchResult]:
             latest_el = item.select_one(".latest-chapter, .last-chapter")
             latest_chapter = latest_el.get_text(strip=True) if latest_el else ""
             
+            # Extract cover image
+            cover_el = item.select_one("img.cover, img.book-cover, .cover img")
+            cover_url = urljoin(config["base_url"], cover_el.get("src", "")) if cover_el else ""
+            
+            # Extract rating if available
+            rating_el = item.select_one(".rating, .score, .stars")
+            rating = rating_el.get_text(strip=True) if rating_el else ""
+            
             results.append(SearchResult(
                 title=title,
                 url=url,
                 source=source_id,
                 author=author,
                 description=description,
+                cover_url=cover_url,
                 latest_chapter=latest_chapter,
+                rating=rating,
             ))
     
     elif source_id == "xbiquge":
@@ -484,11 +508,16 @@ def search_source(source_id: str, query: str) -> List[SearchResult]:
                 author = cols[1].get_text(strip=True) if len(cols) > 1 else ""
                 latest_chapter = cols[3].get_text(strip=True) if len(cols) > 3 else ""
                 
+                # Extract cover image from first column if available
+                cover_el = cols[0].select_one("img")
+                cover_url = urljoin(config["base_url"], cover_el.get("src", "")) if cover_el else ""
+                
                 results.append(SearchResult(
                     title=title,
                     url=url,
                     source=source_id,
                     author=author,
+                    cover_url=cover_url,
                     latest_chapter=latest_chapter,
                 ))
             # Try bookbox format (from HTML samples)
@@ -506,11 +535,16 @@ def search_source(source_id: str, query: str) -> List[SearchResult]:
                 latest_el = item.select_one(".cat a")
                 latest_chapter = latest_el.get_text(strip=True) if latest_el else ""
                 
+                # Extract cover image
+                cover_el = item.select_one("img")
+                cover_url = urljoin(config["base_url"], cover_el.get("src", "")) if cover_el else ""
+                
                 results.append(SearchResult(
                     title=title,
                     url=url,
                     source=source_id,
                     author=author,
+                    cover_url=cover_url,
                     latest_chapter=latest_chapter,
                 ))
     
@@ -532,12 +566,17 @@ def search_source(source_id: str, query: str) -> List[SearchResult]:
             desc_el = item.select_one(".update")
             description = desc_el.get_text(strip=True) if desc_el else ""
             
+            # Extract cover image (biquge.company doesn't have covers in search, but try anyway)
+            cover_el = item.select_one("img")
+            cover_url = urljoin(config["base_url"], cover_el.get("src", "")) if cover_el else ""
+            
             results.append(SearchResult(
                 title=title,
                 url=url,
                 source=source_id,
                 author=author,
                 description=description,
+                cover_url=cover_url,
                 latest_chapter=latest_chapter,
             ))
     
@@ -566,11 +605,21 @@ def search_source(source_id: str, query: str) -> List[SearchResult]:
             author_el = item.select_one(".author")
             author = author_el.get_text(strip=True) if author_el else ""
             
+            # Extract cover image
+            cover_el = item.select_one("img.book-cover, img.cover, .cover img")
+            cover_url = urljoin(config["base_url"], cover_el.get("src", "")) if cover_el else ""
+            
+            # Extract rating if available
+            rating_el = item.select_one(".rating, .score, .stars")
+            rating = rating_el.get_text(strip=True) if rating_el else ""
+            
             results.append(SearchResult(
                 title=title,
                 url=url,
                 source=source_id,
                 author=author,
+                cover_url=cover_url,
+                rating=rating,
             ))
     
     elif source_id == "shuhaige":
@@ -588,11 +637,16 @@ def search_source(source_id: str, query: str) -> List[SearchResult]:
             latest_el = item.select_one(".data a:last-child")
             latest_chapter = latest_el.get_text(strip=True) if latest_el else ""
             
+            # Extract cover image
+            cover_el = item.select_one("img.book-cover, img.cover, .cover img")
+            cover_url = urljoin(config["base_url"], cover_el.get("src", "")) if cover_el else ""
+            
             results.append(SearchResult(
                 title=title,
                 url=url,
                 source=source_id,
                 author=author,
+                cover_url=cover_url,
                 latest_chapter=latest_chapter,
             ))
     
@@ -683,7 +737,7 @@ def search_novel(query: str, sources: Optional[List[str]] = None) -> List[Search
 # Chapter List Extraction
 # ============================================================================
 
-def handle_expand_button(soup: BeautifulSoup, config: Dict) -> BeautifulSoup:
+def handle_expand_button(soup: BeautifulSoup, config: Dict, novel_url: str = "") -> BeautifulSoup:
     """Handle sites with expand buttons for chapter lists."""
     if not config.get("has_expand"):
         return soup
@@ -692,6 +746,40 @@ def handle_expand_button(soup: BeautifulSoup, config: Dict) -> BeautifulSoup:
     # Some sites load all chapters via AJAX when button is clicked
     
     expand_selector = config.get("expand_button_selector", "")
+    source_id = config.get("name", "")
+    
+    # Special handling for ixdzs8 - fetch chapters via AJAX
+    if source_id == "ixdzs8":
+        # Extract book ID from URL
+        import re
+        bid_match = re.search(r'/read/(\d+)/', novel_url)
+        if bid_match:
+            bid = bid_match.group(1)
+            ajax_url = "/novel/clist/"
+            base_url = config["base_url"]
+            full_url = urljoin(base_url, ajax_url)
+            
+            # Fetch chapter list via AJAX
+            try:
+                import json as json_module
+                ajax_response = fetch_url(full_url, method="POST", data={"bid": bid})
+                if ajax_response:
+                    try:
+                        data = json_module.loads(ajax_response)
+                        if data.get("rs") == 200 and "data" in data:
+                            # Build HTML from JSON response
+                            clist_html = "<ul>"
+                            for ch in data["data"]:
+                                ordernum = ch.get("ordernum", "")
+                                title = ch.get("title", "")
+                                clist_html += f'<li><a href="/read/{bid}/p{ordernum}.html">{title}</a></li>'
+                            clist_html += "</ul>"
+                            return BeautifulSoup(clist_html, "lxml")
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+    
     if expand_selector:
         # Try to find data attributes or AJAX endpoints
         expand_btn = soup.select_one(expand_selector)
@@ -729,7 +817,7 @@ def extract_chapters_from_page(html: str, url: str, source_id: str) -> List[Chap
     
     # Handle expand button
     if config.get("has_expand"):
-        soup = handle_expand_button(soup, config)
+        soup = handle_expand_button(soup, config, url)
     
     chapters = []
     chapter_urls_seen = set()
@@ -769,16 +857,12 @@ def extract_chapters_from_page(html: str, url: str, source_id: str) -> List[Chap
             ))
     
     elif source_id == "ttkan":
-        # ttkan: Has expand button, shows 12 latest then full list
-        # After expansion, all chapters should be available
+        # ttkan: All chapters are in the page as links with specific pattern
+        # Look for all chapter links in the page
         
-        chapter_containers = soup.select("#all-chapters .chapter-list, .novel-chapters li")
+        chapter_links = soup.select("a[href*='/novel/pagea/']")
         
-        for idx, container in enumerate(chapter_containers):
-            link = container.find("a") if isinstance(container, Tag) else container.select_one("a")
-            if not link:
-                continue
-            
+        for idx, link in enumerate(chapter_links):
             href = link.get("href", "")
             if not href:
                 continue
@@ -802,6 +886,89 @@ def extract_chapters_from_page(html: str, url: str, source_id: str) -> List[Chap
                 volume=volume,
                 original_index=idx,
             ))
+    
+    elif source_id == "shuhaige":
+        # shuhaige: Has pagination for chapters (50 per page)
+        # Need to fetch multiple pages if available
+        
+        # First extract chapters from current page
+        chapter_links = soup.select(".booklist dd a, .chapter-list a, ul li a")
+        
+        for idx, link in enumerate(chapter_links):
+            href = link.get("href", "")
+            if not href:
+                continue
+            
+            # Filter out non-chapter links
+            if any(x in href.lower() for x in ["login", "register", "search"]):
+                continue
+            
+            chapter_url = urljoin(base_url, href)
+            
+            if chapter_url in chapter_urls_seen:
+                continue
+            chapter_urls_seen.add(chapter_url)
+            
+            title = link.get_text(strip=True)
+            if not title or len(title) < 2:
+                continue
+            
+            chapter_num, volume = extract_chapter_number(title)
+            
+            chapters.append(ChapterInfo(
+                title=title,
+                url=chapter_url,
+                chapter_number=chapter_num,
+                volume=volume,
+                original_index=idx,
+            ))
+        
+        # Check for pagination and fetch additional pages (limit to avoid timeout)
+        if config.get("has_pagination"):
+            # For shuhaige, use the select dropdown to get all page URLs
+            page_select = soup.select(".pagelist select option")
+            if page_select:
+                # Limit to first 5 pages to avoid timeout (can be configured)
+                max_pages = 5
+                page_count = 0
+                # Get all page URLs from the select options
+                for option in page_select:
+                    if page_count >= max_pages:
+                        break
+                    page_href = option.get("value", "")
+                    if not page_href:
+                        continue
+                    page_url = urljoin(base_url, page_href)
+                    if page_url == url:
+                        continue
+                    # Fetch each page
+                    page_html = fetch_url(page_url)
+                    if page_html:
+                        page_soup = BeautifulSoup(page_html, "lxml")
+                        page_chapter_links = page_soup.select(".read li a")
+                        for p_idx, link in enumerate(page_chapter_links):
+                            p_href = link.get("href", "")
+                            if not p_href:
+                                continue
+                            if any(x in p_href.lower() for x in ["login", "register", "search"]):
+                                continue
+                            p_chapter_url = urljoin(base_url, p_href)
+                            if p_chapter_url in chapter_urls_seen:
+                                continue
+                            chapter_urls_seen.add(p_chapter_url)
+                            p_title = link.get_text(strip=True)
+                            if not p_title or len(p_title) < 2:
+                                continue
+                            p_chapter_num, p_volume = extract_chapter_number(p_title)
+                            chapters.append(ChapterInfo(
+                                title=p_title,
+                                url=p_chapter_url,
+                                chapter_number=p_chapter_num,
+                                volume=p_volume,
+                                original_index=len(chapters),
+                            ))
+                        page_count += 1
+                        time.sleep(0.3)  # Rate limiting
     
     elif source_id == "xbiquge":
         # xbiquge: Standard chapter list in order
@@ -934,6 +1101,11 @@ def fetch_novel_info(novel_url: str) -> Optional[NovelInfo]:
     status = ""
     
     # Source-specific metadata extraction
+    rating = ""
+    word_count = ""
+    categories = []
+    recommendations = []
+    
     if source_id == "ixdzs8":
         title_el = soup.select_one("h1.book-title, h1.title")
         title = title_el.get_text(strip=True) if title_el else ""
@@ -949,6 +1121,42 @@ def fetch_novel_info(novel_url: str) -> Optional[NovelInfo]:
         
         status_el = soup.select_one(".status, .book-status")
         status = status_el.get_text(strip=True) if status_el else ""
+        
+        # Extract rating
+        rating_el = soup.select_one(".rating, .score, .stars")
+        rating = rating_el.get_text(strip=True) if rating_el else ""
+        
+        # Extract word count
+        wc_el = soup.select_one(".word-count, .words")
+        word_count = wc_el.get_text(strip=True) if wc_el else ""
+        
+        # Extract categories/tags
+        for cat_el in soup.select(".category a, .tag a, .cate a"):
+            cat_text = cat_el.get_text(strip=True)
+            if cat_text:
+                categories.append(cat_text)
+        
+        # Extract recommendations (大家还在看 / similar novels)
+        rec_section = soup.select_one(".recommendations, .similar-books, .related-novels")
+        if not rec_section:
+            # Try to find section by heading
+            for h in soup.select("h2, h3"):
+                if any(x in h.get_text() for x in ["推荐", "在看", "相关", "similar", "recommend"]):
+                    rec_section = h.find_next_sibling() or h.parent
+                    break
+        
+        if rec_section:
+            for rec_item in rec_section.select("li, .book-item, .novel-item")[:10]:
+                rec_title_el = rec_item.select_one("a[title], h3 a, .title a")
+                rec_url_el = rec_item.select_one("a[href]")
+                if rec_title_el and rec_url_el:
+                    rec_title = rec_title_el.get_text(strip=True)
+                    rec_href = rec_url_el.get("href", "")
+                    if rec_title and rec_href:
+                        recommendations.append({
+                            "title": rec_title,
+                            "url": urljoin(base_url, rec_href),
+                        })
     
     elif source_id == "ttkan":
         title_el = soup.select_one("h1.novel-title, h1.title")
@@ -959,6 +1167,41 @@ def fetch_novel_info(novel_url: str) -> Optional[NovelInfo]:
         
         desc_el = soup.select_one(".novel-intro, .description")
         description = desc_el.get_text(strip=True) if desc_el else ""
+        
+        # Extract cover image
+        cover_el = soup.select_one(".book-cover img, .cover img, img.book-cover")
+        cover_url = urljoin(base_url, cover_el.get("src", "")) if cover_el else ""
+        
+        # Extract rating
+        rating_el = soup.select_one(".rating, .score, .stars")
+        rating = rating_el.get_text(strip=True) if rating_el else ""
+        
+        # Extract categories
+        for cat_el in soup.select(".category a, .tag a, .cate a"):
+            cat_text = cat_el.get_text(strip=True)
+            if cat_text:
+                categories.append(cat_text)
+        
+        # Extract recommendations
+        rec_section = soup.select_one(".recommendations, .similar-books, .related-novels")
+        if not rec_section:
+            for h in soup.select("h2, h3"):
+                if any(x in h.get_text() for x in ["推荐", "在看", "相关", "similar", "recommend"]):
+                    rec_section = h.find_next_sibling() or h.parent
+                    break
+        
+        if rec_section:
+            for rec_item in rec_section.select("li, .book-item, .novel-item")[:10]:
+                rec_title_el = rec_item.select_one("a[title], h3 a, .title a")
+                rec_url_el = rec_item.select_one("a[href]")
+                if rec_title_el and rec_url_el:
+                    rec_title = rec_title_el.get_text(strip=True)
+                    rec_href = rec_url_el.get("href", "")
+                    if rec_title and rec_href:
+                        recommendations.append({
+                            "title": rec_title,
+                            "url": urljoin(base_url, rec_href),
+                        })
     
     elif source_id == "xbiquge":
         title_el = soup.select_one("#info h1")
@@ -977,6 +1220,140 @@ def fetch_novel_info(novel_url: str) -> Optional[NovelInfo]:
         
         cover_el = soup.select_one("#fmimg img")
         cover_url = urljoin(base_url, cover_el.get("src", "")) if cover_el else ""
+        
+        # Extract rating if available
+        rating_el = soup.select_one(".rating, .score, .stars")
+        rating = rating_el.get_text(strip=True) if rating_el else ""
+        
+        # Extract categories
+        for cat_el in soup.select(".category a, .tag a"):
+            cat_text = cat_el.get_text(strip=True)
+            if cat_text:
+                categories.append(cat_text)
+        
+        # Extract recommendations
+        rec_section = soup.select_one(".recommendations, .similar-books, .related-novels")
+        if not rec_section:
+            for h in soup.select("h2, h3"):
+                if any(x in h.get_text() for x in ["推荐", "在看", "相关", "similar", "recommend"]):
+                    rec_section = h.find_next_sibling() or h.parent
+                    break
+        
+        if rec_section:
+            for rec_item in rec_section.select("li, .book-item, .novel-item")[:10]:
+                rec_title_el = rec_item.select_one("a[title], h3 a, .title a")
+                rec_url_el = rec_item.select_one("a[href]")
+                if rec_title_el and rec_url_el:
+                    rec_title = rec_title_el.get_text(strip=True)
+                    rec_href = rec_url_el.get("href", "")
+                    if rec_title and rec_href:
+                        recommendations.append({
+                            "title": rec_title,
+                            "url": urljoin(base_url, rec_href),
+                        })
+    
+    elif source_id == "biquge_company":
+        title_el = soup.select_one("h1.book-title, h1.title")
+        title = title_el.get_text(strip=True) if title_el else ""
+        
+        author_el = soup.select_one(".author, .book-author")
+        author = author_el.get_text(strip=True).replace("作者：", "") if author_el else ""
+        
+        desc_el = soup.select_one(".intro, .description, .summary")
+        description = desc_el.get_text(strip=True) if desc_el else ""
+        
+        # biquge.company doesn't have cover images typically
+        cover_el = soup.select_one(".book-cover img, .cover img")
+        cover_url = urljoin(base_url, cover_el.get("src", "")) if cover_el else ""
+        
+        status_el = soup.select_one(".status, .book-status")
+        status = status_el.get_text(strip=True) if status_el else ""
+        
+        # Extract rating
+        rating_el = soup.select_one(".rating, .score, .stars")
+        rating = rating_el.get_text(strip=True) if rating_el else ""
+        
+        # Extract word count
+        wc_el = soup.select_one(".word-count, .words")
+        word_count = wc_el.get_text(strip=True) if wc_el else ""
+        
+        # Extract categories
+        for cat_el in soup.select(".category a, .tag a, .cate a"):
+            cat_text = cat_el.get_text(strip=True)
+            if cat_text:
+                categories.append(cat_text)
+        
+        # Extract recommendations
+        rec_section = soup.select_one(".recommendations, .similar-books, .related-novels")
+        if not rec_section:
+            for h in soup.select("h2, h3"):
+                if any(x in h.get_text() for x in ["推荐", "在看", "相关", "similar", "recommend"]):
+                    rec_section = h.find_next_sibling() or h.parent
+                    break
+        
+        if rec_section:
+            for rec_item in rec_section.select("li, .book-item, .novel-item")[:10]:
+                rec_title_el = rec_item.select_one("a[title], h3 a, .title a")
+                rec_url_el = rec_item.select_one("a[href]")
+                if rec_title_el and rec_url_el:
+                    rec_title = rec_title_el.get_text(strip=True)
+                    rec_href = rec_url_el.get("href", "")
+                    if rec_title and rec_href:
+                        recommendations.append({
+                            "title": rec_title,
+                            "url": urljoin(base_url, rec_href),
+                        })
+    
+    elif source_id == "shuhaige":
+        title_el = soup.select_one("h1.book-title, h1.title")
+        title = title_el.get_text(strip=True) if title_el else ""
+        
+        author_el = soup.select_one(".author, .book-author")
+        author = author_el.get_text(strip=True).replace("作者：", "") if author_el else ""
+        
+        desc_el = soup.select_one(".intro, .description, .summary")
+        description = desc_el.get_text(strip=True) if desc_el else ""
+        
+        cover_el = soup.select_one(".book-cover img, .cover img")
+        cover_url = urljoin(base_url, cover_el.get("src", "")) if cover_el else ""
+        
+        status_el = soup.select_one(".status, .book-status")
+        status = status_el.get_text(strip=True) if status_el else ""
+        
+        # Extract rating
+        rating_el = soup.select_one(".rating, .score, .stars")
+        rating = rating_el.get_text(strip=True) if rating_el else ""
+        
+        # Extract word count
+        wc_el = soup.select_one(".word-count, .words")
+        word_count = wc_el.get_text(strip=True) if wc_el else ""
+        
+        # Extract categories
+        for cat_el in soup.select(".category a, .tag a, .cate a"):
+            cat_text = cat_el.get_text(strip=True)
+            if cat_text:
+                categories.append(cat_text)
+        
+        # Extract recommendations
+        rec_section = soup.select_one(".recommendations, .similar-books, .related-novels")
+        if not rec_section:
+            for h in soup.select("h2, h3"):
+                if any(x in h.get_text() for x in ["推荐", "在看", "相关", "similar", "recommend"]):
+                    rec_section = h.find_next_sibling() or h.parent
+                    break
+        
+        if rec_section:
+            for rec_item in rec_section.select("li, .book-item, .novel-item")[:10]:
+                rec_title_el = rec_item.select_one("a[title], h3 a, .title a")
+                rec_url_el = rec_item.select_one("a[href]")
+                if rec_title_el and rec_url_el:
+                    rec_title = rec_title_el.get_text(strip=True)
+                    rec_href = rec_url_el.get("href", "")
+                    if rec_title and rec_href:
+                        recommendations.append({
+                            "title": rec_title,
+                            "url": urljoin(base_url, rec_href),
+                        })
     
     # If title still empty, try generic extraction
     if not title:
@@ -1019,6 +1396,10 @@ def fetch_novel_info(novel_url: str) -> Optional[NovelInfo]:
         status=status,
         chapters=unique_chapters,
         total_chapters=len(unique_chapters),
+        rating=rating,
+        word_count=word_count,
+        recommendations=recommendations,
+        categories=categories,
     )
 
 
@@ -1107,8 +1488,12 @@ def display_search_results(results: List[SearchResult]):
         print(f"[{i}] {result.title}")
         print(f"    Source: {result.source}")
         print(f"    URL: {result.url}")
+        if result.cover_url:
+            print(f"    Cover: {result.cover_url}")
         if result.author:
             print(f"    Author: {result.author}")
+        if result.rating:
+            print(f"    Rating: {result.rating}")
         if result.latest_chapter:
             print(f"    Latest: {result.latest_chapter}")
         if result.description:
@@ -1118,14 +1503,33 @@ def display_search_results(results: List[SearchResult]):
 
 
 def display_chapter_list(novel_info: NovelInfo, show_all: bool = False, limit: int = 50):
-    """Display chapter list."""
+    """Display chapter list with full novel info including recommendations."""
     print(f"\n{'='*80}")
     print(f"Novel: {novel_info.title}")
     print(f"Author: {novel_info.author}")
     print(f"Source: {novel_info.source}")
     print(f"Total Chapters: {novel_info.total_chapters}")
+    if novel_info.cover_url:
+        print(f"Cover URL: {novel_info.cover_url}")
     if novel_info.status:
         print(f"Status: {novel_info.status}")
+    if novel_info.rating:
+        print(f"Rating: {novel_info.rating}")
+    if novel_info.word_count:
+        print(f"Word Count: {novel_info.word_count}")
+    if novel_info.categories:
+        print(f"Categories: {', '.join(novel_info.categories)}")
+    if novel_info.description:
+        print(f"\nDescription:\n{novel_info.description}")
+    
+    # Display recommendations (大家还在看 / similar novels)
+    if novel_info.recommendations:
+        print(f"\nRecommendations (大家还在看):")
+        print(f"{'-'*40}")
+        for i, rec in enumerate(novel_info.recommendations[:10], 1):
+            print(f"  {i}. {rec.get('title', 'Unknown')}")
+            print(f"     URL: {rec.get('url', '')}")
+    
     print(f"\nChapter List:")
     print(f"{'-'*80}")
     
