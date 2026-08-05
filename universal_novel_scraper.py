@@ -503,6 +503,102 @@ def search_source(source_id: str, query: str) -> List[SearchResult]:
                 latest_chapter=latest_chapter,
                 rating=rating,
             ))
+    
+    elif source_id == "xbiquge":
+        for item in soup.select("#maincontent tr, .grid tr, .bookbox"):
+            cols = item.find_all("td")
+            if len(cols) >= 3:
+                title_el = cols[0].find("a")
+                if not title_el:
+                    continue
+                title = title_el.get_text(strip=True)
+                url = urljoin(config["base_url"], title_el.get("href", ""))
+                author = cols[1].get_text(strip=True) if len(cols) > 1 else ""
+                latest_chapter = cols[3].get_text(strip=True) if len(cols) > 3 else ""
+                cover_el = cols[0].select_one("img")
+                cover_url = urljoin(config["base_url"], cover_el.get("src", "")) if cover_el else ""
+                results.append(SearchResult(title=title, url=url, source=source_id, author=author, cover_url=cover_url, latest_chapter=latest_chapter))
+            elif item.has_attr('class') and 'bookbox' in item.get('class', []):
+                title_el = item.select_one(".bookname a")
+                if not title_el:
+                    continue
+                title = title_el.get_text(strip=True)
+                url = urljoin(config["base_url"], title_el.get("href", ""))
+                author_el = item.select_one(".author")
+                author = author_el.get_text(strip=True).replace("作者：", "") if author_el else ""
+                latest_el = item.select_one(".cat a")
+                latest_chapter = latest_el.get_text(strip=True) if latest_el else ""
+                cover_el = item.select_one("img")
+                cover_url = urljoin(config["base_url"], cover_el.get("src", "")) if cover_el else ""
+                results.append(SearchResult(title=title, url=url, source=source_id, author=author, cover_url=cover_url, latest_chapter=latest_chapter))
+    
+    elif source_id == "biquge_company":
+        for item in soup.select(".bookbox, .bookinfo"):
+            title_el = item.select_one(".bookname a")
+            if not title_el:
+                continue
+            title = title_el.get_text(strip=True)
+            url = urljoin(config["base_url"], title_el.get("href", ""))
+            author_el = item.select_one(".author")
+            author = author_el.get_text(strip=True).replace("作者：", "") if author_el else ""
+            latest_el = item.select_one(".cat a")
+            latest_chapter = latest_el.get_text(strip=True) if latest_el else ""
+            desc_el = item.select_one(".update")
+            description = desc_el.get_text(strip=True) if desc_el else ""
+            cover_el = item.select_one("img")
+            cover_url = urljoin(config["base_url"], cover_el.get("src", "")) if cover_el else ""
+            results.append(SearchResult(title=title, url=url, source=source_id, author=author, description=description, cover_url=cover_url, latest_chapter=latest_chapter))
+    
+    elif source_id == "ttkan":
+        for item in soup.select(".novel_cell, [data-v-2ba0104b] .pure-g > div"):
+            title_el = item.select_one("h3 a, .title a, a[title]")
+            if not title_el:
+                links = item.find_all("a", href=True)
+                for link in links:
+                    href = link.get("href", "")
+                    if "/novels/" in href or "/novel/" in href:
+                        title_el = link
+                        break
+            if not title_el:
+                continue
+            title = title_el.get_text(strip=True)
+            if len(title) < 2:
+                continue
+            url = urljoin(config["base_url"], title_el.get("href", ""))
+            author_el = item.select_one(".author")
+            author = author_el.get_text(strip=True) if author_el else ""
+            cover_el = item.select_one("img.book-cover, img.cover, .cover img")
+            cover_url = urljoin(config["base_url"], cover_el.get("src", "")) if cover_el else ""
+            rating_el = item.select_one(".rating, .score, .stars")
+            rating = rating_el.get_text(strip=True) if rating_el else ""
+            results.append(SearchResult(title=title, url=url, source=source_id, author=author, cover_url=cover_url, rating=rating))
+    
+    elif source_id == "shuhaige":
+        for item in soup.select(".list li, .book-item, .search-result"):
+            title_el = item.select_one(".bookname a, h3 a, .book-title a")
+            if not title_el:
+                continue
+            title = title_el.get_text(strip=True)
+            url = urljoin(config["base_url"], title_el.get("href", ""))
+            author_el = item.select_one(".data a, .author")
+            author = author_el.get_text(strip=True) if author_el else ""
+            latest_el = item.select_one(".data a:last-child")
+            latest_chapter = latest_el.get_text(strip=True) if latest_el else ""
+            cover_el = item.select_one("img.book-cover, img.cover, .cover img")
+            cover_url = urljoin(config["base_url"], cover_el.get("src", "")) if cover_el else ""
+            results.append(SearchResult(title=title, url=url, source=source_id, author=author, cover_url=cover_url, latest_chapter=latest_chapter))
+    
+    else:
+        # Generic fallback parsing
+        for link in soup.find_all("a", href=True):
+            href = link.get("href", "")
+            if any(pattern in href for pattern in ["/book/", "/novel/", "/read/"]):
+                title = link.get_text(strip=True)
+                if len(title) > 5 and len(title) < 100:
+                    url = urljoin(config["base_url"], href)
+                    results.append(SearchResult(title=title, url=url, source=source_id))
+    
+    return results
 
 
 def get_home_feed(source_id: str, page: int = 1) -> List[SearchResult]:
