@@ -2,6 +2,85 @@
 
 **Complete web novel scraping platform with Cloudflare bypass, multi-source search, parallel processing, home feeds, cover images, and intelligent chapter extraction.**
 
+## 🌐 Web Application & Vercel Deployment
+
+This project now includes a modern FastAPI web application with a beautiful UI for reading novels online. The web app features:
+
+- **Homepage** - Hot novels feed and featured content
+- **Sources Page** - Browse novels by source website
+- **Search Page** - Multi-source search with Netflix-style horizontal sliders (use `--sep` flag for grouped results)
+- **Reader Page** - Full-featured novel reader with TTS support
+- **Settings Page** - Customize TTS, reading experience, and preferences
+
+### Reader Features
+
+- 🎧 **Text-to-Speech** with multiple voices
+- 🔊 **Pitch Control** - Adjust voice pitch (0.5x - 2x)
+- ⏩ **Speed Control** - Playback speed from 0.5x to 5x
+- ✨ **Paragraph Highlighting** - Current paragraph is highlighted during TTS
+- 📜 **Auto-Scroll** - Page automatically follows TTS playback
+- ➡️ **Auto-Next Chapter** - Automatically loads next chapter when TTS finishes
+- 🎨 **Multiple Themes** - Light, Dark, and Sepia modes
+
+### Deploy to Vercel
+
+#### Option 1: One-Click Deploy
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/YOUR_USERNAME/universal_novel_scraper)
+
+#### Option 2: Manual Deployment
+
+1. **Install Vercel CLI:**
+   ```bash
+   npm install -g vercel
+   ```
+
+2. **Login to Vercel:**
+   ```bash
+   vercel login
+   ```
+
+3. **Deploy:**
+   ```bash
+   cd /path/to/universal_novel_scraper
+   vercel
+   ```
+
+4. **Production Deployment:**
+   ```bash
+   vercel --prod
+   ```
+
+#### Vercel Configuration
+
+The project includes a `vercel.json` configuration file that sets up:
+- Python runtime environment
+- Static file serving for CSS/JS
+- API routes for backend endpoints
+- Proper routing for SPA behavior
+
+#### Environment Variables (if needed)
+
+No additional environment variables are required for basic functionality. The app uses the built-in scraper modules.
+
+#### Local Development
+
+```bash
+# Install dependencies
+pip install -r webapp/requirements.txt
+
+# Run the development server
+cd webapp
+python main.py
+
+# Or with uvicorn directly
+uvicorn webapp.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Access the app at `http://localhost:8000`
+
+---
+
 ## Table of Contents
 - [Overview](#overview)
 - [Key Features](#key-features)

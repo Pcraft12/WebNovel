@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sources - Novel Reader</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">📚 Novel Reader</div>
+        <ul class="nav-links">
+            <li><a href="/">Home</a></li>
+            <li><a href="/sources" class="active">Sources</a></li>
+            <li><a href="/search">Search</a></li>
+            <li><a href="/settings">Settings</a></li>
+        </ul>
+    </nav>
+
+    <main class="container">
+        <h1>📖 Browse by Source</h1>
+        <p class="subtitle">Select a source to browse their latest novels</p>
+
+        <div class="sources-grid">
+            <div class="source-card" data-source="ixdzs8">
+                <h3>IXDZS8</h3>
+                <p>Popular Chinese novel site with hot daily updates</p>
+                <button onclick="browseSource('ixdzs8')">Browse</button>
+            </div>
+            <div class="source-card" data-source="shuhaige">
+                <h3>Shuhaige</h3>
+                <p>Extensive library with mobile-friendly interface</p>
+                <button onclick="browseSource('shuhaige')">Browse</button>
+            </div>
+            <div class="source-card" data-source="biquge">
+                <h3>Biquge</h3>
+                <p>Classic layout with sorted novel categories</p>
+                <button onclick="browseSource('biquge')">Browse</button>
+            </div>
+            <div class="source-card" data-source="ttkan">
+                <h3>TTKan</h3>
+                <p>Modern UI with ranked novel recommendations</p>
+                <button onclick="browseSource('ttkan')">Browse</button>
+            </div>
+            <div class="source-card" data-source="xbiquge">
+                <h3>XBiquge</h3>
+                <p>Weekly top novels and trending stories</p>
+                <button onclick="browseSource('xbiquge')">Browse</button>
+            </div>
+        </div>
+
+        <section id="source-feed" class="feed-section" style="display: none;">
+            <h2 id="feed-title">Latest from Source</h2>
+            <div id="feed-container" class="novel-grid"></div>
+        </section>
+    </main>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+        async function browseSource(source) {
+            const feedSection = document.getElementById('source-feed');
+            const feedTitle = document.getElementById('feed-title');
+            const feedContainer = document.getElementById('feed-container');
+            
+            feedSection.style.display = 'block';
+            feedTitle.textContent = `Latest from ${source.toUpperCase()}`;
+            feedContainer.innerHTML = '<div class="loading">Loading...</div>';
+
+            try {
+                const response = await fetch(`/api/feed?source=${source}&page=1`);
+                const data = await response.json();
+                
+                if (data.results && data.results.length > 0) {
+                    feedContainer.innerHTML = data.results.map(novel => `
+                        <div class="novel-card" onclick="window.location.href='/reader?url=${encodeURIComponent(novel.url)}'">
+                            ${novel.cover_url ? `<img src="${novel.cover_url}" alt="${novel.title}" onerror="this.style.display='none'">` : ''}
+                            <div class="novel-info">
+                                <h3>${novel.title}</h3>
+                                <p class="latest">${novel.latest_chapter || 'Unknown'}</p>
+                                <span class="source-tag">${novel.source}</span>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    feedContainer.innerHTML = '<p>No novels found from this source.</p>';
+                }
+            } catch (error) {
+                console.error('Error loading feed:', error);
+                feedContainer.innerHTML = '<p>Error loading novels. Please try again later.</p>';
+            }
+        }
+    </script>
+</body>
+</html>

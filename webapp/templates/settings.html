@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - Novel Reader</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">📚 Novel Reader</div>
+        <ul class="nav-links">
+            <li><a href="/">Home</a></li>
+            <li><a href="/sources">Sources</a></li>
+            <li><a href="/search">Search</a></li>
+            <li><a href="/settings" class="active">Settings</a></li>
+        </ul>
+    </nav>
+
+    <main class="container">
+        <h1>⚙️ Settings</h1>
+
+        <section class="settings-section">
+            <h2>🎧 Text-to-Speech Settings</h2>
+            
+            <div class="setting-group">
+                <label for="default-voice">Default Voice</label>
+                <select id="default-voice">
+                    <option value="">Auto-detect</option>
+                </select>
+                <p class="setting-description">Choose your preferred voice for TTS playback</p>
+            </div>
+
+            <div class="setting-group">
+                <label for="default-speed">Default Speed</label>
+                <input type="range" id="default-speed" min="0.5" max="5" step="0.1" value="1">
+                <span id="default-speed-value">1.0x</span>
+                <p class="setting-description">Playback speed (0.5x to 5x)</p>
+            </div>
+
+            <div class="setting-group">
+                <label for="default-pitch">Default Pitch</label>
+                <input type="range" id="default-pitch" min="0.5" max="2" step="0.1" value="1">
+                <span id="default-pitch-value">1.0</span>
+                <p class="setting-description">Voice pitch adjustment</p>
+            </div>
+
+            <div class="setting-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="auto-next" checked>
+                    <span>Auto-next chapter</span>
+                </label>
+                <p class="setting-description">Automatically load the next chapter when TTS finishes</p>
+            </div>
+
+            <div class="setting-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="highlight-current" checked>
+                    <span>Highlight current paragraph</span>
+                </label>
+                <p class="setting-description">Visually highlight the paragraph being read</p>
+            </div>
+
+            <div class="setting-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="auto-scroll" checked>
+                    <span>Auto-scroll with TTS</span>
+                </label>
+                <p class="setting-description">Automatically scroll to keep current paragraph in view</p>
+            </div>
+        </section>
+
+        <section class="settings-section">
+            <h2>📖 Reading Settings</h2>
+            
+            <div class="setting-group">
+                <label for="font-size">Font Size</label>
+                <input type="range" id="font-size" min="12" max="32" step="1" value="18">
+                <span id="font-size-value">18px</span>
+            </div>
+
+            <div class="setting-group">
+                <label for="line-height">Line Height</label>
+                <input type="range" id="line-height" min="1" max="3" step="0.1" value="1.6">
+                <span id="line-height-value">1.6</span>
+            </div>
+
+            <div class="setting-group">
+                <label for="theme">Theme</label>
+                <select id="theme">
+                    <option value="light">Light</option>
+                    <option value="dark">Dark</option>
+                    <option value="sepia">Sepia</option>
+                </select>
+            </div>
+
+            <div class="setting-group">
+                <label for="max-width">Max Content Width</label>
+                <input type="range" id="max-width" min="600" max="1200" step="50" value="800">
+                <span id="max-width-value">800px</span>
+            </div>
+        </section>
+
+        <section class="settings-section">
+            <h2>🔍 Search Settings</h2>
+            
+            <div class="setting-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="sep-default" checked>
+                    <span>Separate results by source (default)</span>
+                </label>
+                <p class="setting-description">Show search results grouped by source with horizontal sliders</p>
+            </div>
+
+            <div class="setting-group">
+                <label>Preferred Sources</label>
+                <div class="source-toggles">
+                    <label class="toggle-label"><input type="checkbox" checked value="ixdzs8"> IXDZS8</label>
+                    <label class="toggle-label"><input type="checkbox" checked value="shuhaige"> Shuhaige</label>
+                    <label class="toggle-label"><input type="checkbox" checked value="biquge"> Biquge</label>
+                    <label class="toggle-label"><input type="checkbox" checked value="ttkan"> TTKan</label>
+                    <label class="toggle-label"><input type="checkbox" checked value="xbiquge"> XBiquge</label>
+                </div>
+            </div>
+        </section>
+
+        <section class="settings-section">
+            <h2>💾 Storage</h2>
+            
+            <div class="setting-group">
+                <button class="btn-danger" onclick="clearStorage()">Clear All Saved Data</button>
+                <p class="setting-description">This will clear your reading history, bookmarks, and settings</p>
+            </div>
+        </section>
+
+        <div class="save-settings">
+            <button onclick="saveSettings()">💾 Save Settings</button>
+        </div>
+    </main>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+        // Load voices for default voice selector
+        function loadVoices() {
+            const voices = window.speechSynthesis.getVoices();
+            const voiceSelect = document.getElementById('default-voice');
+            voices.forEach((voice, index) => {
+                const option = document.createElement('option');
+                option.value = index;
+                option.textContent = `${voice.name} (${voice.lang})`;
+                voiceSelect.appendChild(option);
+            });
+        }
+
+        if (speechSynthesis.onvoiceschanged !== undefined) {
+            speechSynthesis.onvoiceschanged = loadVoices;
+        }
+
+        // Update display values
+        document.getElementById('default-speed').addEventListener('input', (e) => {
+            document.getElementById('default-speed-value').textContent = `${e.target.value}x`;
+        });
+
+        document.getElementById('default-pitch').addEventListener('input', (e) => {
+            document.getElementById('default-pitch-value').textContent = e.target.value;
+        });
+
+        document.getElementById('font-size').addEventListener('input', (e) => {
+            document.getElementById('font-size-value').textContent = `${e.target.value}px`;
+        });
+
+        document.getElementById('line-height').addEventListener('input', (e) => {
+            document.getElementById('line-height-value').textContent = e.target.value;
+        });
+
+        document.getElementById('max-width').addEventListener('input', (e) => {
+            document.getElementById('max-width-value').textContent = `${e.target.value}px`;
+        });
+
+        // Load saved settings
+        function loadSettings() {
+            const settings = JSON.parse(localStorage.getItem('novelReaderSettings') || '{}');
+            
+            if (settings.voice) document.getElementById('default-voice').value = settings.voice;
+            if (settings.speed) {
+                document.getElementById('default-speed').value = settings.speed;
+                document.getElementById('default-speed-value').textContent = `${settings.speed}x`;
+            }
+            if (settings.pitch) {
+                document.getElementById('default-pitch').value = settings.pitch;
+                document.getElementById('default-pitch-value').textContent = settings.pitch;
+            }
+            if (settings.autoNext !== undefined) document.getElementById('auto-next').checked = settings.autoNext;
+            if (settings.highlightCurrent !== undefined) document.getElementById('highlight-current').checked = settings.highlightCurrent;
+            if (settings.autoScroll !== undefined) document.getElementById('auto-scroll').checked = settings.autoScroll;
+            if (settings.fontSize) {
+                document.getElementById('font-size').value = settings.fontSize;
+                document.getElementById('font-size-value').textContent = `${settings.fontSize}px`;
+            }
+            if (settings.lineHeight) {
+                document.getElementById('line-height').value = settings.lineHeight;
+                document.getElementById('line-height-value').textContent = settings.lineHeight;
+            }
+            if (settings.theme) document.getElementById('theme').value = settings.theme;
+            if (settings.maxWidth) {
+                document.getElementById('max-width').value = settings.maxWidth;
+                document.getElementById('max-width-value').textContent = `${settings.maxWidth}px`;
+            }
+            if (settings.sepDefault !== undefined) document.getElementById('sep-default').checked = settings.sepDefault;
+        }
+
+        // Save settings
+        function saveSettings() {
+            const settings = {
+                voice: document.getElementById('default-voice').value,
+                speed: parseFloat(document.getElementById('default-speed').value),
+                pitch: parseFloat(document.getElementById('default-pitch').value),
+                autoNext: document.getElementById('auto-next').checked,
+                highlightCurrent: document.getElementById('highlight-current').checked,
+                autoScroll: document.getElementById('auto-scroll').checked,
+                fontSize: parseInt(document.getElementById('font-size').value),
+                lineHeight: parseFloat(document.getElementById('line-height').value),
+                theme: document.getElementById('theme').value,
+                maxWidth: parseInt(document.getElementById('max-width').value),
+                sepDefault: document.getElementById('sep-default').checked
+            };
+
+            localStorage.setItem('novelReaderSettings', JSON.stringify(settings));
+            alert('Settings saved successfully!');
+        }
+
+        // Clear storage
+        function clearStorage() {
+            if (confirm('Are you sure you want to clear all saved data? This cannot be undone.')) {
+                localStorage.clear();
+                alert('All data cleared. Page will now reload.');
+                location.reload();
+            }
+        }
+
+        // Apply theme
+        function applyTheme(theme) {
+            document.body.className = `theme-${theme}`;
+        }
+
+        document.getElementById('theme').addEventListener('change', (e) => {
+            applyTheme(e.target.value);
+        });
+
+        // Load settings on page load
+        loadSettings();
+        
+        // Apply saved theme
+        const savedSettings = JSON.parse(localStorage.getItem('novelReaderSettings') || '{}');
+        if (savedSettings.theme) {
+            applyTheme(savedSettings.theme);
+        }
+    </script>
+</body>
+</html>

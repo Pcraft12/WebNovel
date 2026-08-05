@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Novel Reader - Home</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">📚 Novel Reader</div>
+        <ul class="nav-links">
+            <li><a href="/" class="active">Home</a></li>
+            <li><a href="/sources">Sources</a></li>
+            <li><a href="/search">Search</a></li>
+            <li><a href="/settings">Settings</a></li>
+        </ul>
+    </nav>
+
+    <main class="container">
+        <section class="hero">
+            <h1>Welcome to Novel Reader</h1>
+            <p>Your ultimate destination for reading web novels from multiple sources</p>
+        </section>
+
+        <section class="featured">
+            <h2>🔥 Hot Novels Today</h2>
+            <div id="hot-novels" class="novel-grid">
+                <div class="loading">Loading...</div>
+            </div>
+        </section>
+
+        <section class="features">
+            <div class="feature-card">
+                <h3>🔍 Multi-Source Search</h3>
+                <p>Search across 5+ novel websites simultaneously</p>
+            </div>
+            <div class="feature-card">
+                <h3>🎧 Text-to-Speech</h3>
+                <p>Listen to your novels with customizable TTS voices</p>
+            </div>
+            <div class="feature-card">
+                <h3>⚡ Fast & Clean</h3>
+                <p>Ad-free reading experience with smart content extraction</p>
+            </div>
+        </section>
+    </main>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+        // Load hot novels on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            loadHotNovels();
+        });
+
+        async function loadHotNovels() {
+            try {
+                const response = await fetch('/api/feed?page=1');
+                const data = await response.json();
+                const container = document.getElementById('hot-novels');
+                
+                if (data.results && data.results.length > 0) {
+                    container.innerHTML = data.results.slice(0, 12).map(novel => `
+                        <div class="novel-card" onclick="window.location.href='/reader?url=${encodeURIComponent(novel.url)}'">
+                            ${novel.cover_url ? `<img src="${novel.cover_url}" alt="${novel.title}" onerror="this.style.display='none'">` : ''}
+                            <div class="novel-info">
+                                <h3>${novel.title}</h3>
+                                <p class="latest">${novel.latest_chapter || 'Unknown'}</p>
+                                <span class="source-tag">${novel.source}</span>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    container.innerHTML = '<p>No novels found. Try searching!</p>';
+                }
+            } catch (error) {
+                console.error('Error loading novels:', error);
+                document.getElementById('hot-novels').innerHTML = '<p>Error loading novels. Please try again later.</p>';
+            }
+        }
+    </script>
+</body>
+</html>

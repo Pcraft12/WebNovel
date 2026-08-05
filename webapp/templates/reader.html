@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reader - Novel Reader</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">📚 Novel Reader</div>
+        <ul class="nav-links">
+            <li><a href="/">Home</a></li>
+            <li><a href="/sources">Sources</a></li>
+            <li><a href="/search">Search</a></li>
+            <li><a href="/settings">Settings</a></li>
+        </ul>
+    </nav>
+
+    <main class="reader-container">
+        <aside class="chapter-list" id="chapter-list-panel">
+            <h2>Chapters</h2>
+            <div id="chapters-container" class="chapters-list"></div>
+        </aside>
+
+        <section class="reader-content">
+            <header class="reader-header">
+                <button class="toggle-chapters" onclick="toggleChapterList()">☰ Chapters</button>
+                <h1 id="chapter-title">Loading...</h1>
+                <div class="reader-controls">
+                    <button onclick="previousChapter()" title="Previous Chapter">◀ Prev</button>
+                    <button onclick="nextChapter()" title="Next Chapter">Next ▶</button>
+                </div>
+            </header>
+
+            <article id="chapter-content" class="chapter-text">
+                <div class="loading">Loading chapter...</div>
+            </article>
+
+            <footer class="reader-footer">
+                <button onclick="previousChapter()">◀ Previous Chapter</button>
+                <button onclick="nextChapter()">Next Chapter ▶</button>
+            </footer>
+        </section>
+
+        <aside class="tts-controls" id="tts-panel">
+            <h3>🎧 Text-to-Speech</h3>
+            
+            <div class="tts-control-group">
+                <label>Voice</label>
+                <select id="tts-voice"></select>
+            </div>
+
+            <div class="tts-control-group">
+                <label>Speed: <span id="speed-value">1.0</span>x</label>
+                <input type="range" id="tts-speed" min="0.5" max="5" step="0.1" value="1" oninput="updateSpeed(this.value)">
+            </div>
+
+            <div class="tts-control-group">
+                <label>Pitch: <span id="pitch-value">1.0</span></label>
+                <input type="range" id="tts-pitch" min="0.5" max="2" step="0.1" value="1" oninput="updatePitch(this.value)">
+            </div>
+
+            <div class="tts-buttons">
+                <button onclick="toggleTTS()" id="tts-toggle-btn">▶ Play</button>
+                <button onclick="stopTTS()">⏹ Stop</button>
+            </div>
+
+            <div class="tts-status">
+                <p>Status: <span id="tts-status">Stopped</span></p>
+                <p>Paragraph: <span id="tts-paragraph">0</span>/<span id="tts-total">0</span></p>
+            </div>
+        </aside>
+    </main>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+        let currentNovelUrl = '';
+        let chapters = [];
+        let currentChapterIndex = 0;
+        let chapterContent = '';
+        let paragraphs = [];
+        
+        // TTS variables
+        let synth = window.speechSynthesis;
+        let ttsVoices = [];
+        let isPlaying = false;
+        let currentParagraph = 0;
+        let ttsSettings = {
+            speed: 1.0,
+            pitch: 1.0,
+            voice: null
+        };
+
+        // Load voices
+        function loadVoices() {
+            ttsVoices = synth.getVoices();
+            const voiceSelect = document.getElementById('tts-voice');
+            voiceSelect.innerHTML = ttsVoices.map((voice, index) => 
+                `<option value="${index}">${voice.name} (${voice.lang})</option>`
+            ).join('');
+            
+            // Try to find English voice
+            const englishVoice = ttsVoices.findIndex(v => v.lang.startsWith('en'));
+            if (englishVoice !== -1) {
+                voiceSelect.value = englishVoice;
+                ttsSettings.voice = ttsVoices[englishVoice];
+            }
+        }
+
+        // Initialize voices when they're loaded
+        if (speechSynthesis.onvoiceschanged !== undefined) {
+            speechSynthesis.onvoiceschanged = loadVoices;
+        }
+
+        function updateSpeed(value) {
+            ttsSettings.speed = parseFloat(value);
+            document.getElementById('speed-value').textContent = value;
+        }
+
+        function updatePitch(value) {
+            ttsSettings.pitch = parseFloat(value);
+            document.getElementById('pitch-value').textContent = value;
+        }
+
+        // Get URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        currentNovelUrl = urlParams.get('url');
+
+        if (currentNovelUrl) {
+            loadNovelInfo();
+        } else {
+            document.getElementById('chapter-content').innerHTML = '<p>No novel selected. Please go back and select a novel.</p>';
+        }
+
+        async function loadNovelInfo() {
+            try {
+                const response = await fetch(`/api/novel-info?url=${encodeURIComponent(currentNovelUrl)}`);
+                const data = await response.json();
+                
+                document.title = `${data.title} - Novel Reader`;
+                chapters = data.chapters;
+                
+                // Display chapter list
+                const chaptersContainer = document.getElementById('chapters-container');
+                chaptersContainer.innerHTML = chapters.map((ch, idx) => 
+                    `<div class="chapter-item" onclick="loadChapter(${idx})">${ch.title}</div>`
+                ).join('');
+                
+                // Load first chapter
+                if (chapters.length > 0) {
+                    loadChapter(0);
+                }
+            } catch (error) {
+                console.error('Error loading novel info:', error);
+                document.getElementById('chapter-content').innerHTML = '<p>Error loading novel information.</p>';
+            }
+        }
+
+        async function loadChapter(index) {
+            if (index < 0 || index >= chapters.length) return;
+            
+            currentChapterIndex = index;
+            const chapter = chapters[index];
+            
+            document.getElementById('chapter-title').textContent = chapter.title;
+            document.getElementById('chapter-content').innerHTML = '<div class="loading">Loading chapter...</div>';
+            
+            // Highlight current chapter in list
+            document.querySelectorAll('.chapter-item').forEach((item, idx) => {
+                item.classList.toggle('active', idx === index);
+            });
+
+            try {
+                const response = await fetch(`/api/chapter?url=${encodeURIComponent(chapter.url)}`);
+                const data = await response.json();
+                
+                chapterContent = data.content;
+                paragraphs = chapterContent.split('\n\n').filter(p => p.trim().length > 0);
+                
+                // Render chapter with paragraph spans for TTS highlighting
+                document.getElementById('chapter-content').innerHTML = paragraphs
+                    .map((p, idx) => `<p class="paragraph" id="para-${idx}">${p}</p>`)
+                    .join('');
+                
+                // Update TTS info
+                document.getElementById('tts-total').textContent = paragraphs.length;
+                currentParagraph = 0;
+                stopTTS();
+                
+                // Scroll to top
+                document.querySelector('.reader-content').scrollTop = 0;
+                
+            } catch (error) {
+                console.error('Error loading chapter:', error);
+                document.getElementById('chapter-content').innerHTML = '<p>Error loading chapter content.</p>';
+            }
+        }
+
+        function previousChapter() {
+            if (currentChapterIndex > 0) {
+                loadChapter(currentChapterIndex - 1);
+            }
+        }
+
+        function nextChapter() {
+            if (currentChapterIndex < chapters.length - 1) {
+                loadChapter(currentChapterIndex + 1);
+            } else {
+                alert('You\'ve reached the end of available chapters!');
+            }
+        }
+
+        function toggleChapterList() {
+            document.getElementById('chapter-list-panel').classList.toggle('collapsed');
+        }
+
+        // TTS Functions
+        function toggleTTS() {
+            if (isPlaying) {
+                pauseTTS();
+            } else {
+                playTTS();
+            }
+        }
+
+        function playTTS() {
+            if (paragraphs.length === 0) return;
+            
+            isPlaying = true;
+            document.getElementById('tts-toggle-btn').textContent = '⏸ Pause';
+            document.getElementById('tts-status').textContent = 'Playing';
+            
+            speakParagraph(currentParagraph);
+        }
+
+        function pauseTTS() {
+            synth.cancel();
+            isPlaying = false;
+            document.getElementById('tts-toggle-btn').textContent = '▶ Play';
+            document.getElementById('tts-status').textContent = 'Paused';
+        }
+
+        function stopTTS() {
+            synth.cancel();
+            isPlaying = false;
+            currentParagraph = 0;
+            document.getElementById('tts-toggle-btn').textContent = '▶ Play';
+            document.getElementById('tts-status').textContent = 'Stopped';
+            document.getElementById('tts-paragraph').textContent = '0';
+            clearHighlights();
+        }
+
+        function speakParagraph(index) {
+            if (index >= paragraphs.length) {
+                // Auto-next chapter
+                if (currentChapterIndex < chapters.length - 1) {
+                    setTimeout(() => {
+                        nextChapter();
+                        setTimeout(playTTS, 1000); // Start TTS after chapter loads
+                    }, 2000);
+                } else {
+                    stopTTS();
+                    document.getElementById('tts-status').textContent = 'Completed';
+                }
+                return;
+            }
+
+            currentParagraph = index;
+            document.getElementById('tts-paragraph').textContent = index + 1;
+            
+            // Highlight current paragraph
+            clearHighlights();
+            const paraElement = document.getElementById(`para-${index}`);
+            if (paraElement) {
+                paraElement.classList.add('highlight');
+                paraElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+
+            const utterance = new SpeechSynthesisUtterance(paragraphs[index]);
+            utterance.rate = ttsSettings.speed;
+            utterance.pitch = ttsSettings.pitch;
+            if (ttsSettings.voice) {
+                utterance.voice = ttsSettings.voice;
+            }
+
+            utterance.onend = () => {
+                if (isPlaying) {
+                    speakParagraph(index + 1);
+                }
+            };
+
+            utterance.onerror = (event) => {
+                console.error('TTS Error:', event);
+                if (isPlaying) {
+                    speakParagraph(index + 1);
+                }
+            };
+
+            synth.speak(utterance);
+        }
+
+        function clearHighlights() {
+            document.querySelectorAll('.paragraph').forEach(p => p.classList.remove('highlight'));
+        }
+
+        // Load voices on page load
+        loadVoices();
+    </script>
+</body>
+</html>

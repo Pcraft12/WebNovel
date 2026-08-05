@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Search - Novel Reader</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">📚 Novel Reader</div>
+        <ul class="nav-links">
+            <li><a href="/">Home</a></li>
+            <li><a href="/sources">Sources</a></li>
+            <li><a href="/search" class="active">Search</a></li>
+            <li><a href="/settings">Settings</a></li>
+        </ul>
+    </nav>
+
+    <main class="container">
+        <h1>🔍 Multi-Source Search</h1>
+        
+        <div class="search-box">
+            <input type="text" id="search-input" placeholder="Enter novel title, author, or keywords..." onkeypress="if(event.key==='Enter')performSearch()">
+            <button onclick="performSearch()">Search</button>
+            <label class="checkbox-label">
+                <input type="checkbox" id="sep-flag">
+                <span>Separate results by source</span>
+            </label>
+        </div>
+
+        <div id="search-results" class="search-results">
+            <!-- Results will be displayed here -->
+        </div>
+    </main>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+        async function performSearch() {
+            const query = document.getElementById('search-input').value.trim();
+            const sepFlag = document.getElementById('sep-flag').checked;
+            const resultsContainer = document.getElementById('search-results');
+
+            if (!query) {
+                alert('Please enter a search query');
+                return;
+            }
+
+            resultsContainer.innerHTML = '<div class="loading">Searching across all sources...</div>';
+
+            try {
+                const response = await fetch(`/api/search?q=${encodeURIComponent(query)}&sep=${sepFlag}`);
+                const data = await response.json();
+
+                if (data.grouped) {
+                    // Display grouped by source (Netflix-style horizontal sliders)
+                    let html = '';
+                    for (const [source, novels] of Object.entries(data.results)) {
+                        html += `
+                            <section class="source-section">
+                                <h2 class="source-title">${source.toUpperCase()}</h2>
+                                <div class="novel-slider">
+                                    ${novels.map(novel => `
+                                        <div class="slider-item" onclick="window.location.href='/reader?url=${encodeURIComponent(novel.url)}'">
+                                            ${novel.cover_url ? `<img src="${novel.cover_url}" alt="${novel.title}" onerror="this.style.display='none'">` : ''}
+                                            <div class="slider-info">
+                                                <h3>${novel.title}</h3>
+                                                <p class="latest">${novel.latest_chapter || 'Unknown'}</p>
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </section>
+                        `;
+                    }
+                    resultsContainer.innerHTML = html;
+                } else {
+                    // Display combined results
+                    if (data.results && data.results.length > 0) {
+                        resultsContainer.innerHTML = `
+                            <div class="results-header">
+                                <h2>Found ${data.results.length} results</h2>
+                            </div>
+                            <div class="results-grid">
+                                ${data.results.map(novel => `
+                                    <div class="result-card" onclick="window.location.href='/reader?url=${encodeURIComponent(novel.url)}'">
+                                        ${novel.cover_url ? `<img src="${novel.cover_url}" alt="${novel.title}" onerror="this.style.display='none'">` : ''}
+                                        <div class="result-info">
+                                            <h3>${novel.title}</h3>
+                                            <p class="author">${novel.author || 'Unknown Author'}</p>
+                                            <p class="latest">${novel.latest_chapter || 'Unknown'}</p>
+                                            <span class="source-tag">${novel.source}</span>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        `;
+                    } else {
+                        resultsContainer.innerHTML = '<p>No results found. Try a different search term.</p>';
+                    }
+                }
+            } catch (error) {
+                console.error('Search error:', error);
+                resultsContainer.innerHTML = '<p>Error performing search. Please try again later.</p>';
+            }
+        }
+    </script>
+</body>
+</html>
