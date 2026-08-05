@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Favourites - Novel Reader</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">📚 Novel Reader</div>
+        <ul class="nav-links">
+            <li><a href="/">Home</a></li>
+            <li><a href="/sources">Sources</a></li>
+            <li><a href="/search">Search</a></li>
+            <li><a href="/favourites" class="active">Favourites</a></li>
+            <li><a href="/info">Info</a></li>
+            <li><a href="/settings">Settings</a></li>
+        </ul>
+    </nav>
+
+    <main class="container">
+        <h1>⭐ Favourite Novels</h1>
+        <p class="subtitle">Your saved novels for quick access</p>
+
+        <div id="favourites-container" class="novel-grid">
+            <div class="loading">Loading your favourites...</div>
+        </div>
+
+        <div id="empty-favourites" style="display: none; text-align: center; padding: 4rem 0;">
+            <h2>No favourites yet</h2>
+            <p>Start adding novels to your favourites by clicking the ⭐ button on novel pages!</p>
+            <button onclick="window.location.href='/search'" style="margin-top: 1rem; padding: 1rem 2rem; background: var(--primary-color); color: white; border: none; border-radius: 8px; cursor: pointer;">Browse Novels</button>
+        </div>
+    </main>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', loadFavourites);
+
+        function loadFavourites() {
+            const favourites = JSON.parse(localStorage.getItem('novelFavourites') || '[]');
+            const container = document.getElementById('favourites-container');
+            const emptyMsg = document.getElementById('empty-favourites');
+
+            if (favourites.length === 0) {
+                container.style.display = 'none';
+                emptyMsg.style.display = 'block';
+                return;
+            }
+
+            container.innerHTML = favourites.map(novel => `
+                <div class="novel-card" onclick="window.location.href='/reader?url=${encodeURIComponent(novel.url)}'">
+                    ${novel.cover_url ? `<img src="${novel.cover_url}" alt="${novel.title}" onerror="this.style.display='none'">` : ''}
+                    <div class="novel-info">
+                        <h3>${novel.title}</h3>
+                        <p class="latest">${novel.latest_chapter || 'Unknown'}</p>
+                        <span class="source-tag">${novel.source}</span>
+                        <button class="remove-favourite" onclick="event.stopPropagation(); removeFavourite('${novel.url}')">❌ Remove</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function removeFavourite(url) {
+            let favourites = JSON.parse(localStorage.getItem('novelFavourites') || '[]');
+            favourites = favourites.filter(n => n.url !== url);
+            localStorage.setItem('novelFavourites', JSON.stringify(favourites));
+            loadFavourites();
+        }
+    </script>
+
+    <style>
+        .remove-favourite {
+            margin-top: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: var(--danger-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+        .remove-favourite:hover {
+            opacity: 0.8;
+        }
+    </style>
+</body>
+</html>
