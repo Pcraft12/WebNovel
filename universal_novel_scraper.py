@@ -34,6 +34,7 @@ import json
 import re
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple, Any
 from urllib.parse import urljoin, urlparse, parse_qs, quote
@@ -44,6 +45,13 @@ try:
     from bs4 import BeautifulSoup, Tag
 except ImportError:
     sys.exit("Required packages: pip install requests beautifulsoup4 lxml")
+
+# Try to import the bypasser for Cloudflare protection
+try:
+    from bypasser import Bypasser, fetch as bp_fetch
+    BYPASSER_AVAILABLE = True
+except ImportError:
+    BYPASSER_AVAILABLE = False
 
 # Try to import the existing novel_extractor for chapter content extraction
 try:
@@ -234,8 +242,53 @@ class NovelInfo:
 # Utility Functions
 # ============================================================================
 
-def fetch_url(url: str, headers: Optional[Dict] = None, timeout: int = 30, method: str = "GET", data: Optional[Dict] = None) -> Optional[str]:
-    """Fetch URL content with error handling, supporting GET and POST methods."""
+# Global bypasser instance (lazy-initialized)
+_bypasser_instance: Optional[Bypasser] = None
+
+
+def _get_bypasser() -> Optional[Bypasser]:
+    """Get or create bypasser instance."""
+    global _bypasser_instance
+    if not BYPASSER_AVAILABLE:
+        return None
+    if _bypasser_instance is None:
+        _bypasser_instance = Bypasser()
+    return _bypasser_instance
+
+
+def fetch_url(url: str, headers: Optional[Dict] = None, timeout: int = 30, 
+              method: str = "GET", data: Optional[Dict] = None, 
+              use_bypasser: bool = True) -> Optional[str]:
+    """
+    Fetch URL content with error handling, supporting GET and POST methods.
+    
+    Args:
+        url: URL to fetch
+        headers: Optional custom headers
+        timeout: Request timeout in seconds
+        method: HTTP method (GET or POST)
+        data: POST data (if method is POST)
+        use_bypasser: Whether to use bypasser for Cloudflare protection
+    
+    Returns:
+        HTML content as string, or None on failure
+    """
+    # Try bypasser first if available and requested
+    if use_bypasser and BYPASSER_AVAILABLE:
+        try:
+            bp = _get_bypasser()
+            if bp:
+                if method.upper() == "POST" and data:
+                    result = bp.fetch(url, method="POST", data=data)
+                else:
+                    result = bp.fetch(url, method="GET")
+                if result and len(result.strip()) > 100:
+                    return result
+        except Exception as e:
+            # Fallback to regular requests
+            pass
+    
+    # Fallback to regular requests
     try:
         if method.upper() == "POST" and data:
             response = requests.post(
