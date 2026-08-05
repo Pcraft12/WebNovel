@@ -61,7 +61,9 @@ SOURCES = {
     "ixdzs8": {
         "name": "ixdzs8",
         "base_url": "https://ixdzs8.com",
-        "search_url": "https://ixdzs8.com/search?q={query}",
+        "search_url": "https://ixdzs8.com/bsearch?q={query}",
+        "search_method": "GET",
+        "search_selector": ".u-list li, .book-item, .search-result",
         "chapter_list_pattern": r"/book/\d+/dir",
         "has_expand": True,
         "expand_button_selector": ".chapter-expand-btn",
@@ -71,7 +73,9 @@ SOURCES = {
     "xbiquge": {
         "name": "xbiquge",
         "base_url": "https://www.xbiquge.info",
-        "search_url": "https://www.xbiquge.info/modules/article/search.php?searchkey={query}",
+        "search_url": "https://www.xbiquge.info/search.php?q={query}",
+        "search_method": "GET",
+        "search_selector": "#maincontent tr, .grid tr, .bookbox",
         "chapter_list_pattern": r"/\d+/",
         "has_expand": False,
         "latest_chapters_first": False,
@@ -80,7 +84,10 @@ SOURCES = {
     "biquge_company": {
         "name": "biquge.company",
         "base_url": "https://www.biquge.company",
-        "search_url": "https://www.biquge.company/search?q={query}",
+        "search_url": "https://www.biquge.company/modules/article/search.php",
+        "search_method": "POST",
+        "search_data": {"searchkey": "{query}", "action": "login"},
+        "search_selector": ".bookbox, .bookinfo",
         "chapter_list_pattern": r"/book/\d+/",
         "has_expand": False,
         "latest_chapters_first": False,
@@ -89,7 +96,9 @@ SOURCES = {
     "ttkan": {
         "name": "ttkan",
         "base_url": "https://www.ttkan.co",
-        "search_url": "https://www.ttkan.co/search?q={query}",
+        "search_url": "https://www.ttkan.co/novel/search?q={query}",
+        "search_method": "GET",
+        "search_selector": ".novel_cell, [data-v-2ba0104b] .pure-g > div",
         "chapter_list_pattern": r"/novels/[^/]+/",
         "has_expand": True,
         "expand_button_selector": "button[data-target='#all-chapters']",
@@ -99,8 +108,11 @@ SOURCES = {
     "shuhaige": {
         "name": "shuhaige",
         "base_url": "https://m.shuhaige.net",
-        "search_url": "https://m.shuhaige.net/search?q={query}",
-        "chapter_list_pattern": r"/read/\d+/",
+        "search_url": "https://m.shuhaige.net/search.html",
+        "search_method": "POST",
+        "search_data": {"searchkey": "{query}"},
+        "search_selector": ".list li, .book-item, .search-result",
+        "chapter_list_pattern": r"/read/\d+/|/shu_\d+/",
         "has_expand": False,
         "latest_chapters_first": True,
         "duplicate_latest_count": 0,
@@ -222,15 +234,24 @@ class NovelInfo:
 # Utility Functions
 # ============================================================================
 
-def fetch_url(url: str, headers: Optional[Dict] = None, timeout: int = 30) -> Optional[str]:
-    """Fetch URL content with error handling."""
+def fetch_url(url: str, headers: Optional[Dict] = None, timeout: int = 30, method: str = "GET", data: Optional[Dict] = None) -> Optional[str]:
+    """Fetch URL content with error handling, supporting GET and POST methods."""
     try:
-        response = requests.get(
-            url,
-            headers=headers or DEFAULT_HEADERS,
-            timeout=timeout,
-            allow_redirects=True,
-        )
+        if method.upper() == "POST" and data:
+            response = requests.post(
+                url,
+                data=data,
+                headers=headers or DEFAULT_HEADERS,
+                timeout=timeout,
+                allow_redirects=True,
+            )
+        else:
+            response = requests.get(
+                url,
+                headers=headers or DEFAULT_HEADERS,
+                timeout=timeout,
+                allow_redirects=True,
+            )
         response.encoding = response.apparent_encoding
         if response.status_code == 200:
             return response.text
@@ -343,19 +364,34 @@ def search_source(source_id: str, query: str) -> List[SearchResult]:
         return []
     
     config = SOURCES[source_id]
-    search_url = config["search_url"].format(query=quote(query))
     
-    html = fetch_url(search_url)
+    # Build search URL and data
+    search_url = config["search_url"].format(query=quote(query))
+    search_method = config.get("search_method", "GET")
+    search_data = None
+    
+    # Handle POST data with query substitution
+    if search_method.upper() == "POST" and "search_data" in config:
+        search_data = {}
+        for key, value in config["search_data"].items():
+            search_data[key] = value.format(query=query)
+        # For POST, the URL doesn't need the query parameter
+        search_url = config["search_url"]
+    
+    html = fetch_url(search_url, method=search_method, data=search_data)
     if not html:
         return []
     
     soup = BeautifulSoup(html, "lxml")
     results = []
     
+    # Get selector from config or use defaults
+    selector = config.get("search_selector", ".novel-item, .book-item, .search-result")
+    
     # Source-specific parsing logic
     if source_id == "ixdzs8":
         # Look for novel items in search results
-        for item in soup.select(".novel-item, .book-item, .search-result"):
+        for item in soup.select(".u-list li, .book-item, .search-result"):
             title_el = item.select_one("h3 a, h2 a, .title a")
             if not title_el:
                 continue
@@ -382,35 +418,96 @@ def search_source(source_id: str, query: str) -> List[SearchResult]:
             ))
     
     elif source_id == "xbiquge":
-        for item in soup.select("#maincontent tr, .grid tr"):
+        for item in soup.select("#maincontent tr, .grid tr, .bookbox"):
+            # Try table row format first
             cols = item.find_all("td")
-            if len(cols) < 3:
-                continue
-            
-            title_el = cols[0].find("a")
+            if len(cols) >= 3:
+                title_el = cols[0].find("a")
+                if not title_el:
+                    continue
+                
+                title = title_el.get_text(strip=True)
+                url = urljoin(config["base_url"], title_el.get("href", ""))
+                author = cols[1].get_text(strip=True) if len(cols) > 1 else ""
+                latest_chapter = cols[3].get_text(strip=True) if len(cols) > 3 else ""
+                
+                results.append(SearchResult(
+                    title=title,
+                    url=url,
+                    source=source_id,
+                    author=author,
+                    latest_chapter=latest_chapter,
+                ))
+            # Try bookbox format (from HTML samples)
+            elif item.has_attr('class') and 'bookbox' in item.get('class', []):
+                title_el = item.select_one(".bookname a")
+                if not title_el:
+                    continue
+                
+                title = title_el.get_text(strip=True)
+                url = urljoin(config["base_url"], title_el.get("href", ""))
+                
+                author_el = item.select_one(".author")
+                author = author_el.get_text(strip=True).replace("作者：", "") if author_el else ""
+                
+                latest_el = item.select_one(".cat a")
+                latest_chapter = latest_el.get_text(strip=True) if latest_el else ""
+                
+                results.append(SearchResult(
+                    title=title,
+                    url=url,
+                    source=source_id,
+                    author=author,
+                    latest_chapter=latest_chapter,
+                ))
+    
+    elif source_id == "biquge_company":
+        for item in soup.select(".bookbox, .bookinfo"):
+            title_el = item.select_one(".bookname a")
             if not title_el:
                 continue
             
             title = title_el.get_text(strip=True)
             url = urljoin(config["base_url"], title_el.get("href", ""))
-            author = cols[1].get_text(strip=True) if len(cols) > 1 else ""
-            latest_chapter = cols[3].get_text(strip=True) if len(cols) > 3 else ""
+            
+            author_el = item.select_one(".author")
+            author = author_el.get_text(strip=True).replace("作者：", "") if author_el else ""
+            
+            latest_el = item.select_one(".cat a")
+            latest_chapter = latest_el.get_text(strip=True) if latest_el else ""
+            
+            desc_el = item.select_one(".update")
+            description = desc_el.get_text(strip=True) if desc_el else ""
             
             results.append(SearchResult(
                 title=title,
                 url=url,
                 source=source_id,
                 author=author,
+                description=description,
                 latest_chapter=latest_chapter,
             ))
     
     elif source_id == "ttkan":
-        for item in soup.select(".novel-card, .book-card, .search-item"):
-            title_el = item.select_one("h3 a, h2 a, .title a")
+        # Handle AMP-based search results
+        for item in soup.select(".novel_cell, [data-v-2ba0104b] .pure-g > div"):
+            title_el = item.select_one("h3 a, .bookname a, a[title]")
+            if not title_el:
+                # Try finding links with novel-like structure
+                links = item.find_all("a", href=True)
+                for link in links:
+                    href = link.get("href", "")
+                    if "/novels/" in href or "/novel/" in href:
+                        title_el = link
+                        break
+            
             if not title_el:
                 continue
             
             title = title_el.get_text(strip=True)
+            if len(title) < 2:  # Skip very short titles
+                continue
+                
             url = urljoin(config["base_url"], title_el.get("href", ""))
             
             author_el = item.select_one(".author")
@@ -424,22 +521,26 @@ def search_source(source_id: str, query: str) -> List[SearchResult]:
             ))
     
     elif source_id == "shuhaige":
-        for item in soup.select(".book-item, .search-result"):
-            title_el = item.select_one("h3 a, .book-title a")
+        for item in soup.select(".list li, .book-item, .search-result"):
+            title_el = item.select_one(".bookname a, h3 a, .book-title a")
             if not title_el:
                 continue
             
             title = title_el.get_text(strip=True)
             url = urljoin(config["base_url"], title_el.get("href", ""))
             
-            author_el = item.select_one(".author")
+            author_el = item.select_one(".data a, .author")
             author = author_el.get_text(strip=True) if author_el else ""
+            
+            latest_el = item.select_one(".data a:last-child")
+            latest_chapter = latest_el.get_text(strip=True) if latest_el else ""
             
             results.append(SearchResult(
                 title=title,
                 url=url,
                 source=source_id,
                 author=author,
+                latest_chapter=latest_chapter,
             ))
     
     else:
